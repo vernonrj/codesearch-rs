@@ -13,6 +13,7 @@ pub enum QueryOperation {
 }
 
 
+#[derive(Debug)]
 pub struct Query {
     operation: QueryOperation,
     trigram: HashSet<String>,
@@ -84,11 +85,11 @@ impl Query {
 
 #[derive(Default)]
 pub struct RegexInfo {
-    can_empty: bool,
-    exact_set: Option<HashSet<String>>,
-    prefix: HashSet<String>,
-    suffix: HashSet<String>,
-    query: Query
+    pub can_empty: bool,
+    pub exact_set: Option<HashSet<String>>,
+    pub prefix: HashSet<String>,
+    pub suffix: HashSet<String>,
+    pub query: Query
 }
 
 impl RegexInfo {
@@ -100,19 +101,51 @@ impl RegexInfo {
             | &Expr::WordBoundary | &Expr::NotWordBoundary => {
                 return Self::empty_string();
             },
-            &Expr::Literal {..} => {
-                panic!("Literal not implemented yet");
+            &Expr::Literal {ref chars, ref casei} => {
+                if *casei == true {
+                    match chars.len() {
+                        0 => return Self::empty_string(),
+                        1 => { 
+                            unimplemented!();
+                        },
+                        _ => ()
+                    }
+                    // Multi-letter case-folded string:
+                    // treat as concatenation of single-letter case-folded strings.
+                    let mut info = Self::empty_string();
+                    for i in 0 .. chars.len() {
+                        let rune = vec![chars[i]];
+                        let re1 = Expr::Literal {
+                            chars: rune,
+                            casei: *casei
+                        };
+                        info = concat(info, Self::new(&re1))
+                    }
+                    return info;
+                }
+                let exact_set = {
+                    let mut h = HashSet::<String>::new();
+                    h.insert(chars.iter().cloned().collect());
+                    h
+                };
+                RegexInfo {
+                    can_empty: false,
+                    exact_set: Some(exact_set.clone()),
+                    prefix: HashSet::new(),
+                    suffix: HashSet::new(),
+                    query: and_trigrams(Query::all(), &exact_set)
+                }
             },
             &Expr::AnyChar | &Expr::AnyCharNoNL => {
                 return Self::any_char();
             },
             &Expr::Concat(ref v) => {
-                let analyzed = v.iter().map(|r| RegexInfo::new(r));
-                return analyzed.fold(Self::empty_string(), |a, b| concat(a, b));
+                let analyzed = v.iter().map(RegexInfo::new);
+                return analyzed.fold(Self::empty_string(), concat);
             },
             &Expr::Alternate(ref v) => {
-                let analyzed = v.iter().map(|r| RegexInfo::new(r));
-                return analyzed.fold(Self::no_match(), |a, b| alternate(a, b));
+                let analyzed = v.iter().map(RegexInfo::new);
+                return analyzed.fold(Self::no_match(), alternate);
             },
             &Expr::Repeat {ref e, ref r, /* ref greedy */ .. } => {
                 match r {
@@ -136,10 +169,20 @@ impl RegexInfo {
                         }
                         return info;
                     },
-                    &Repeater::Range {..} => panic!("Ranges not implented yet!")
+                    &Repeater::Range {..} => unimplemented!() /* is this needed? */
                 }
             },
-            _ => panic!("Path not implemented")
+            &Expr::Class(_) => {
+                // let mut info = RegexInfo {
+                //     can_empty: false,
+                //     exact_set: None,
+                //     prefix: HashSet::new(),
+                //     suffix: HashSet::new(),
+                //     query: Query::all()
+                // };
+                unimplemented!(); // Don't know what to do from here...
+            },
+            _ => unimplemented!() /* Still have more cases to implement */
         }
     }
     fn no_match() -> Self {
@@ -269,7 +312,7 @@ fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
 
 /// Returns the length of the shortest string in xs
 fn min_string_len(xs: &HashSet<String>) -> usize {
-    xs.iter().map(|s| s.len()).min().unwrap()
+    xs.iter().map(String::len).min().unwrap()
 }
 
 /// Returns the cross product of s and t

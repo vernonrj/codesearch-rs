@@ -13,4 +13,8 @@ fn main() {
     for each in i.indexed_paths() {
         println!("{}", each);
     }
+    let expr = regex_syntax::Expr::parse("derp").unwrap();
+    println!("{:?}", expr);
+    let q = index::regexp::RegexInfo::new(&expr).query;
+    println!("{:?}", q);
 }
