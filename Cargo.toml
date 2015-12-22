@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
+clap = "1.5.4"
 memmap = "0.2.3"
 byteorder = "0.4.2"
 regex = "0.1.44"

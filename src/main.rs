@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 extern crate byteorder;
+#[macro_use]
+extern crate clap;
 extern crate memmap;
 extern crate num;
 extern crate regex;
@@ -8,16 +10,69 @@ extern crate regex_syntax;
 extern crate varint;
 
 mod index;
+mod csearch_regex;
 
 fn main() {
-    println!("Running");
+    let matches = clap::App::new("csearch")
+        .version(&crate_version!()[..])
+        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright the Go authors)")
+        .about("
+Csearch behaves like grep over all indexed files, searching for regexp,
+an RE2 (nearly PCRE) regular expression.
+
+Csearch relies on the existence of an up-to-date index created ahead of time.
+To build or rebuild the index that csearch uses, run:
+
+	cindex path...
+
+where path... is a list of directories or individual files to be included in the index.
+If no index exists, this command creates one.  If an index already exists, cindex
+overwrites it.  Run cindex --help for more.
+
+Csearch uses the index stored in $CSEARCHINDEX or, if that variable is unset or
+empty, $HOME/.csearchindex.
+")
+        .arg(clap::Arg::with_name("PATTERN")
+             .help("a regular expression to search with")
+             .required(true)
+             .index(1))
+        .arg(clap::Arg::with_name("count")
+             .short("c").long("count")
+             .help("print only a count of matching lines per file"))
+        .arg(clap::Arg::with_name("FILE_PATTERN")
+             .short("G").long("file-search-regex")
+             .help("limit search to filenames matching FILE_PATTERN")
+             .takes_value(true))
+        .arg(clap::Arg::with_name("ignore-case")
+             .short("i").long("ignore-case")
+             .help("Match case insensitively"))
+        .arg(clap::Arg::with_name("files-with-matches")
+             .short("l").long("files-with-matches")
+             .help("Only print filenames that contain matches (don't print the matching lines)"))
+        .arg(clap::Arg::with_name("line-number")
+             .short("n").long("line-number")
+             .help("print line number with output lines"))
+        .arg(clap::Arg::with_name("NUM")
+             .short("m").long("max-count")
+             .takes_value(true)
+             .help("stop after NUM matches"))
+        .arg(clap::Arg::with_name("bruteforce")
+             .long("brute")
+             .help("brute force - search all files in the index"))
+        .get_matches();
+    let pattern = matches.value_of("PATTERN").unwrap();
+    let match_options = csearch_regex::matcher::MatchOptions {
+        pattern: regex::Regex::new(pattern.clone()).unwrap(),
+        print_count: matches.is_present("count"),
+        file_pattern: matches.value_of("FILE_PATTERN").map(|s| regex::Regex::new(s).unwrap()),
+        ignore_case: matches.is_present("ignore-case"),
+        files_with_matches_only: matches.is_present("files-with-matches"),
+        line_number: matches.is_present("line-number"),
+        max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap())
+    };
+    println!("{:?}", match_options);
     let i = index::read::Index::open("/home/vernon/.csearchindex").unwrap();
-    for each in i.indexed_paths() {
-        println!("{}", each);
-    }
-    let expr_input = r"postingList|derp";
-    let expr = regex_syntax::Expr::parse(expr_input.clone()).unwrap();
-    let re = regex::Regex::new(expr_input.clone()).unwrap();
+    let expr = regex_syntax::Expr::parse(pattern.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
 
     let post = i.query(q, None);
