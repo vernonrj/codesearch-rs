@@ -1,11 +1,75 @@
-/// Implements reading from the index
+/// Read from index
+///
+/// Original code Copyright 2011 The Go Authors.  All rights reserved.
+/// Use of this source code is governed by a BSD-style
+/// license that can be found in the LICENSE file.
+
+/// Index format.
+///
+/// An index stored on disk has the format:
+///
+///	"csearch index 1\n"
+///	list of paths
+///	list of names
+///	list of posting lists
+///	name index
+///	posting list index
+///	trailer
+///
+/// The list of paths is a sorted sequence of NUL-terminated file or directory names.
+/// The index covers the file trees rooted at those paths.
+/// The list ends with an empty name ("\x00").
+///
+/// The list of names is a sorted sequence of NUL-terminated file names.
+/// The initial entry in the list corresponds to file #0,
+/// the next to file #1, and so on.  The list ends with an
+/// empty name ("\x00").
+///
+/// The list of posting lists are a sequence of posting lists.
+/// Each posting list has the form:
+///
+///	trigram [3]
+///	deltas [v]...
+///
+/// The trigram gives the 3 byte trigram that this list describes.  The
+/// delta list is a sequence of varint-encoded deltas between file
+/// IDs, ending with a zero delta.  For example, the delta list [2,5,1,1,0]
+/// encodes the file ID list 1, 6, 7, 8.  The delta list [0] would
+/// encode the empty file ID list, but empty posting lists are usually
+/// not recorded at all.  The list of posting lists ends with an entry
+/// with trigram "\xff\xff\xff" and a delta list consisting a single zero.
+///
+/// The indexes enable efficient random access to the lists.  The name
+/// index is a sequence of 4-byte big-endian values listing the byte
+/// offset in the name list where each name begins.  The posting list
+/// index is a sequence of index entries describing each successive
+/// posting list.  Each index entry has the form:
+///
+///	trigram [3]
+///	file count [4]
+///	offset [4]
+///
+/// Index entries are only written for the non-empty posting lists,
+/// so finding the posting list for a specific trigram requires a
+/// binary search over the posting list index.  In practice, the majority
+/// of the possible trigrams are never seen, so omitting the missing
+/// ones represents a significant storage savings.
+///
+/// The trailer has the form:
+///
+///	offset of path list [4]
+///	offset of name list [4]
+///	offset of posting lists [4]
+///	offset of name index [4]
+///	offset of posting list index [4]
+///	"\ncsearch trailr\n"
+
 use std::path::Path;
 use std::io;
-use std::u32;
 use std::fmt;
 use std::fmt::Debug;
 
-use memmap::{Mmap, MmapView, Protection};
+use memmap::{Mmap, Protection};
 use std::io::Cursor;
 use byteorder::{BigEndian, ReadBytesExt};
 use varint::VarintRead;
@@ -86,21 +150,21 @@ impl Index {
                 }
         })
     }
-    pub fn query(&self, query: Query, restrict: Option<Vec<u32>>) -> Option<Vec<u32>> {
+    pub fn query(&self, query: Query, restrict: Option<Vec<u32>>) -> Vec<u32> {
         match query.operation {
-            QueryOperation::None => Some(Vec::new()),
+            QueryOperation::None => Vec::new(),
             QueryOperation::All => {
                 if restrict.is_some() {
-                    return restrict;
+                    return restrict.unwrap();
                 }
                 let mut v = Vec::<u32>::new();
                 for idx in 0 .. self.num_name {
                     v.push(idx as u32);
                 }
-                Some(v)
+                v
             },
             QueryOperation::And => {
-                let mut m_v = None;
+                let mut m_v: Option<Vec<u32>> = None;
                 for trigram in query.trigram {
                     let bytes = trigram.as_bytes();
                     let tri_val = (bytes[0] as u32) << 16
@@ -111,10 +175,11 @@ impl Index {
                     } else {
                         m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &restrict));
                     }
-                    assert!(m_v.is_some());
-                    if let &Some(ref v) = &m_v {
+                    if let Some(v) = m_v {
                         if v.is_empty() {
-                            return None;
+                            return v;
+                        } else {
+                            m_v = Some(v);
                         }
                     }
                 }
@@ -122,16 +187,33 @@ impl Index {
                     // if m_v.is_none() {
                     //     m_v = restrict;
                     // }
-                    m_v = self.query(sub, m_v);
-                    match m_v {
-                        None => return None,
-                        Some(ref v) if v.len() == 0 => return None,
-                        _ => ()
+                    let v = self.query(sub, m_v);
+                    if v.len() == 0 {
+                        return v;
+                    }
+                    m_v = Some(v);
+                }
+                return m_v.unwrap_or(Vec::new());
+            },
+            QueryOperation::Or => {
+                let mut m_v = None;
+                for trigram in query.trigram {
+                    let bytes = trigram.as_bytes();
+                    let tri_val = (bytes[0] as u32) << 16
+                                | (bytes[1] as u32) << 8
+                                | (bytes[2] as u32);
+                    if m_v.is_none() {
+                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
+                    } else {
+                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &restrict));
                     }
                 }
-                return m_v;
-            },
-            QueryOperation::Or => unimplemented!()
+                for sub in query.sub {
+                    let list1 = self.query(sub, restrict.clone());
+                    m_v = Some(merge_or(m_v.unwrap_or(Vec::new()), list1))
+                }
+                return m_v.unwrap_or(Vec::new());
+            }
         }
     }
     pub fn len(&self) -> usize {
@@ -176,7 +258,6 @@ impl Index {
             let (d, _) = right_side.split_at(POST_ENTRY_SIZE * self.num_post);
             d
         };
-        println!("size of slice = {}", d.len());
         let result = search::search(self.num_post, |i| {
             let i_scaled = i * POST_ENTRY_SIZE;
             let tri_val = (d[i_scaled] as u32) << 16
@@ -206,6 +287,26 @@ impl Index {
     }
 }
 
+fn merge_or(l1: Vec<u32>, l2: Vec<u32>) -> Vec<u32> {
+    let mut l = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+    while i < l1.len() || j < l2.len() {
+		if j == l2.len() || i < l1.len() && l1[i] < l2[j] {
+			l.push(l1[i]);
+			i += 1;
+        } else if i == l1.len() || (j < l2.len() && l1[i] > l2[j]) {
+			l.push(l2[j]);
+			j += 1;
+        } else if l1[i] == l2[j] {
+			l.push(l1[i]);
+			i += 1;
+			j += 1;
+		}
+	}
+	return l;
+}
+
 #[derive(Debug)]
 struct PostReader<'a, 'b> {
     index: &'a Index,
@@ -219,7 +320,6 @@ struct PostReader<'a, 'b> {
 impl<'a, 'b> PostReader<'a, 'b> {
     fn new(index: &'a Index, trigram: u32, restrict: &'b Option<Vec<u32>>) -> Option<Self> {
         let (count, offset) = index.find_list(trigram);
-        println!("{}, {}", count, offset);
         if count == 0 {
             return None;
         }
@@ -245,9 +345,9 @@ impl<'a, 'b> PostReader<'a, 'b> {
     {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut v = Vec::new();
+            let mut i = 0;
             while r.next() {
                 let fileid = r.fileid;
-                let mut i = 0;
                 while i < list.len() && (list[i] as i64) < fileid {
                     i += 1;
                 }
@@ -257,6 +357,31 @@ impl<'a, 'b> PostReader<'a, 'b> {
                     i += 1;
                 }
             }
+            v
+        } else {
+            Vec::new()
+        }
+    }
+    pub fn or(index: &'a Index,
+              list: Vec<u32>,
+              trigram: u32,
+              restrict: &'b Option<Vec<u32>>) -> Vec<u32>
+    {
+        if let Some(mut r) = Self::new(index, trigram, restrict) {
+            let mut v = Vec::new();
+            let mut i = 0;
+            while r.next() {
+                let fileid = r.fileid;
+                while i < list.len() && (list[i] as i64) < fileid {
+                    v.push(list[i] as u32);
+                    i += 1;
+                }
+                v.push(fileid as u32);
+                if i < list.len() && (list[i] as i64) == fileid {
+                    i += 1;
+                }
+            }
+            v.extend(&list[i ..]);
             v
         } else {
             Vec::new()

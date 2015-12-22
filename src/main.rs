@@ -15,11 +15,11 @@ fn main() {
     for each in i.indexed_paths() {
         println!("{}", each);
     }
-    let expr_input = "postingQuery";
+    let expr_input = r"postingList";
     let expr = regex_syntax::Expr::parse(expr_input.clone()).unwrap();
     let re = regex::Regex::new(expr_input.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
-    let mut post = i.query(q, None).unwrap();
+    let post = i.query(q, None);
     // TODO: used for file filtering
     // let file_ids = post.iter().filter(|&file_id| {
     //     let name = i.name(*file_id as usize);
