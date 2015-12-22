@@ -15,9 +15,9 @@ pub enum QueryOperation {
 
 #[derive(Debug)]
 pub struct Query {
-    operation: QueryOperation,
-    trigram: HashSet<String>,
-    sub: Vec<Query>
+    pub operation: QueryOperation,
+    pub trigram: HashSet<String>,
+    pub sub: Vec<Query>
 }
 
 impl Default for Query {
