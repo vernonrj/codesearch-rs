@@ -150,7 +150,7 @@ impl Index {
                 }
         })
     }
-    pub fn query(&self, query: Query, restrict: Option<Vec<u32>>) -> Vec<u32> {
+    pub fn query(&self, query: Query, mut restrict: Option<Vec<u32>>) -> Vec<u32> {
         match query.operation {
             QueryOperation::None => Vec::new(),
             QueryOperation::All => {
@@ -171,9 +171,9 @@ impl Index {
                                 | (bytes[1] as u32) << 8
                                 | (bytes[2] as u32);
                     if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
+                        m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
                     } else {
-                        m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &restrict));
+                        m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &mut restrict));
                     }
                     if let Some(v) = m_v {
                         if v.is_empty() {
@@ -203,9 +203,9 @@ impl Index {
                                 | (bytes[1] as u32) << 8
                                 | (bytes[2] as u32);
                     if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
+                        m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
                     } else {
-                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &restrict));
+                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &mut restrict));
                     }
                 }
                 for sub in query.sub {
@@ -314,11 +314,11 @@ struct PostReader<'a, 'b> {
     offset: u32,
     fileid: i64,
     d: Cursor<Vec<u8>>,
-    restrict: &'b Option<Vec<u32>>
+    restrict: &'b mut Option<Vec<u32>>
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
-    fn new(index: &'a Index, trigram: u32, restrict: &'b Option<Vec<u32>>) -> Option<Self> {
+    fn new(index: &'a Index, trigram: u32, restrict: &'b mut Option<Vec<u32>>) -> Option<Self> {
         let (count, offset) = index.find_list(trigram);
         if count == 0 {
             return None;
@@ -341,7 +341,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     pub fn and(index: &'a Index,
                list: Vec<u32>,
                trigram: u32,
-               restrict: &'b Option<Vec<u32>>) -> Vec<u32>
+               restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
     {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut v = Vec::new();
@@ -365,7 +365,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     pub fn or(index: &'a Index,
               list: Vec<u32>,
               trigram: u32,
-              restrict: &'b Option<Vec<u32>>) -> Vec<u32>
+              restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
     {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut v = Vec::new();
@@ -387,7 +387,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             Vec::new()
         }
     }
-    pub fn list(index: &'a Index, trigram: u32, restrict: &Option<Vec<u32>>) -> Vec<u32> {
+    pub fn list(index: &'a Index, trigram: u32, restrict: &mut Option<Vec<u32>>) -> Vec<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut x = Vec::<u32>::new();
             while r.next() {
@@ -404,7 +404,20 @@ impl<'a, 'b> PostReader<'a, 'b> {
             self.count -= 1;
             let delta = self.d.read_unsigned_varint_32().unwrap();
             self.fileid += delta as i64;
-            // TODO: add .restrict
+            let mut is_fileid_found = true;
+            if let Some(ref mut r) = *self.restrict {
+                let mut i = 0;
+                while i < r.len() && (r[i] as i64) < self.fileid {
+                    i += 1;
+                }
+                *r = r.split_off(i);
+                if r.is_empty() || (r[0] as i64) != self.fileid {
+                    is_fileid_found = false;
+                }
+            }
+            if !is_fileid_found {
+                continue
+            }
             return true;
         }
         // list should end with terminating 0 delta
