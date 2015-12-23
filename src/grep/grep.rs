@@ -7,16 +7,62 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::fs::File;
 use std::path::Path;
 
+/**
+ * Search files for matching expressions
+ *
+ * Grep takes a pattern an applies it to files, returning
+ * an iterator for walking over matches in a file.
+ *
+ * ```no_run
+ * extern crate regex;
+ *
+ * use regex::Regex;
+ * use grep::grep::{Grep, GrepIter};
+ *
+ * # fn foo() -> Result<()> {
+ * let g = Grep::new(Regex::new(r"Pattern").unwrap());
+ *
+ * let it: GrepIter = try!(g.open("foo.txt"));
+ *
+ * for each_result in it {
+ *     println!("match = {}", each_result.line);
+ * }
+ * # Ok(())
+ * # }
+ * ```
+ *
+ */
 pub struct Grep {
     expression: Regex
 }
 
 impl Grep {
+    /// Takes a regular expression and returns a Grep instance
+    ///
+    /// ```
+    /// # extern crate regex;
+    /// # use regex::Regex;
+    /// # fn foo() {
+    /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
+    /// # }
+    /// ```
     pub fn new(expression: Regex) -> Self {
         Grep {
             expression: expression
         }
     }
+
+    /// Takes a filename and returns a GrepIter. Fails if the file open fails.
+    ///
+    /// ```no_run
+    /// # extern crate regex;
+    /// # use regex::Regex;
+    /// # fn foo() {
+    /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
+    /// let it: GrepIter = try!(g.open("foo.txt"));
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn open<P: AsRef<Path> + ToString>(&self, path: P) -> io::Result<GrepIter> {
         File::open(path).map(|f| {
             GrepIter {

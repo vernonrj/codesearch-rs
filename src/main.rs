@@ -13,8 +13,8 @@ extern crate regex;
 extern crate regex_syntax;
 extern crate varint;
 
-mod index;
-mod grep;
+pub mod index;
+pub mod grep;
 
 use std::io::Write;
 use std::collections::HashMap;
