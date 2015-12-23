@@ -73,7 +73,11 @@ impl Grep {
     }
 }
 
-
+/**
+ * Iterator over a file, returning matches to an expression.
+ *
+ * Returned from Grep::open
+ */
 pub struct GrepIter {
     expression: Regex,
     open_file: Box<Iterator<Item=(usize, io::Result<String>)>>
@@ -85,9 +89,17 @@ impl GrepIter {
     }
 }
 
+/**
+ * Match for an expression in a file.
+ *
+ * Returned from GrepIter::next().
+ */
 #[derive(Debug)]
 pub struct MatchResult {
+    /// The line that matched
     pub line: String,
+
+    /// The line number of the line that matched
     pub line_number: usize
 }
 

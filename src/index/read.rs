@@ -3,65 +3,65 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-/// Index format.
-///
-/// An index stored on disk has the format:
-///
-///	"csearch index 1\n"
-///	list of paths
-///	list of names
-///	list of posting lists
-///	name index
-///	posting list index
-///	trailer
-///
-/// The list of paths is a sorted sequence of NUL-terminated file or directory names.
-/// The index covers the file trees rooted at those paths.
-/// The list ends with an empty name ("\x00").
-///
-/// The list of names is a sorted sequence of NUL-terminated file names.
-/// The initial entry in the list corresponds to file #0,
-/// the next to file #1, and so on.  The list ends with an
-/// empty name ("\x00").
-///
-/// The list of posting lists are a sequence of posting lists.
-/// Each posting list has the form:
-///
-///	trigram [3]
-///	deltas [v]...
-///
-/// The trigram gives the 3 byte trigram that this list describes.  The
-/// delta list is a sequence of varint-encoded deltas between file
-/// IDs, ending with a zero delta.  For example, the delta list [2,5,1,1,0]
-/// encodes the file ID list 1, 6, 7, 8.  The delta list [0] would
-/// encode the empty file ID list, but empty posting lists are usually
-/// not recorded at all.  The list of posting lists ends with an entry
-/// with trigram "\xff\xff\xff" and a delta list consisting a single zero.
-///
-/// The indexes enable efficient random access to the lists.  The name
-/// index is a sequence of 4-byte big-endian values listing the byte
-/// offset in the name list where each name begins.  The posting list
-/// index is a sequence of index entries describing each successive
-/// posting list.  Each index entry has the form:
-///
-///	trigram [3]
-///	file count [4]
-///	offset [4]
-///
-/// Index entries are only written for the non-empty posting lists,
-/// so finding the posting list for a specific trigram requires a
-/// binary search over the posting list index.  In practice, the majority
-/// of the possible trigrams are never seen, so omitting the missing
-/// ones represents a significant storage savings.
-///
-/// The trailer has the form:
-///
-///	offset of path list [4]
-///	offset of name list [4]
-///	offset of posting lists [4]
-///	offset of name index [4]
-///	offset of posting list index [4]
-///	"\ncsearch trailr\n"
+// Index format.
+//
+// An index stored on disk has the format:
+//
+//	"csearch index 1\n"
+//	list of paths
+//	list of names
+//	list of posting lists
+//	name index
+//	posting list index
+//	trailer
+//
+// The list of paths is a sorted sequence of NUL-terminated file or directory names.
+// The index covers the file trees rooted at those paths.
+// The list ends with an empty name ("\x00").
+//
+// The list of names is a sorted sequence of NUL-terminated file names.
+// The initial entry in the list corresponds to file #0,
+// the next to file #1, and so on.  The list ends with an
+// empty name ("\x00").
+//
+// The list of posting lists are a sequence of posting lists.
+// Each posting list has the form:
+//
+//	trigram [3]
+//	deltas [v]...
+//
+// The trigram gives the 3 byte trigram that this list describes.  The
+// delta list is a sequence of varint-encoded deltas between file
+// IDs, ending with a zero delta.  For example, the delta list [2,5,1,1,0]
+// encodes the file ID list 1, 6, 7, 8.  The delta list [0] would
+// encode the empty file ID list, but empty posting lists are usually
+// not recorded at all.  The list of posting lists ends with an entry
+// with trigram "\xff\xff\xff" and a delta list consisting a single zero.
+//
+// The indexes enable efficient random access to the lists.  The name
+// index is a sequence of 4-byte big-endian values listing the byte
+// offset in the name list where each name begins.  The posting list
+// index is a sequence of index entries describing each successive
+// posting list.  Each index entry has the form:
+//
+//	trigram [3]
+//	file count [4]
+//	offset [4]
+//
+// Index entries are only written for the non-empty posting lists,
+// so finding the posting list for a specific trigram requires a
+// binary search over the posting list index.  In practice, the majority
+// of the possible trigrams are never seen, so omitting the missing
+// ones represents a significant storage savings.
+//
+// The trailer has the form:
+//
+//	offset of path list [4]
+//	offset of name list [4]
+//	offset of posting lists [4]
+//	offset of name index [4]
+//	offset of posting list index [4]
+//	"\ncsearch trailr\n"
 
 use std::path::Path;
 use std::io;
@@ -79,10 +79,32 @@ use index::search;
 static TRAILER_MAGIC: &'static str = "\ncsearch trailr\n";
 const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
 
+/// Simple alias for an ID representing a filename in the Index.
+pub type FileID = u32;
 
-/**
- * Implementation of the index
- */
+
+/// Representation of an Index
+///
+/// ```no_run
+/// extern crate regex_syntax;
+/// use regex_syntax::Expr;
+///
+/// use index::read::{Index, RegexInfo};
+///
+/// # fn foo() -> Result<()> {
+/// let expr = Expr::parse(r"Pattern").unwrap();
+/// let q = RegexInfo::new(&expr).query;
+///
+/// let idx = try!(Index::open("foo.txt"));
+///
+/// let matching_file_ids = idx.query(q, None);
+///
+/// for each in matching_file_ids {
+///    println!("filename = {}", idx.name(each));
+/// }
+/// # Ok(())
+/// # }
+/// ```
 pub struct Index {
     data: Mmap,
     path_data: u32,
@@ -117,6 +139,14 @@ impl Index {
             buf.read_u32::<BigEndian>().unwrap()
         }
     }
+    /// Open an index file from path
+    ///
+    /// ```no_run
+    /// # use index::read::Index;
+    /// # fn foo() -> Result<()> {
+    /// let idx = try!(Index::open("foo.txt"));
+    /// # Ok(())
+    /// # }
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Index> {
         Mmap::open_path(path, Protection::Read)
             .map(|m| {
@@ -149,7 +179,9 @@ impl Index {
                 }
         })
     }
-    pub fn query(&self, query: Query, mut restrict: Option<Vec<u32>>) -> Vec<u32> {
+
+    /// Takes a query and returns a list of matching file IDs.
+    pub fn query(&self, query: Query, mut restrict: Option<Vec<FileID>>) -> Vec<FileID> {
         match query.operation {
             QueryOperation::None => Vec::new(),
             QueryOperation::All => {
@@ -158,12 +190,12 @@ impl Index {
                 }
                 let mut v = Vec::<u32>::new();
                 for idx in 0 .. self.num_name {
-                    v.push(idx as u32);
+                    v.push(idx as FileID);
                 }
                 v
             },
             QueryOperation::And => {
-                let mut m_v: Option<Vec<u32>> = None;
+                let mut m_v: Option<Vec<FileID>> = None;
                 for trigram in query.trigram {
                     let bytes = trigram.as_bytes();
                     let tri_val = (bytes[0] as u32) << 16
@@ -215,12 +247,18 @@ impl Index {
             }
         }
     }
+
+    /// Returns the size of the index
     pub fn len(&self) -> usize {
         self.data.len()
     }
-    pub unsafe fn as_slice(&self) -> &[u8] {
+
+    /// Returns the index as a slice
+    unsafe fn as_slice(&self) -> &[u8] {
         self.data.as_slice()
     }
+
+    /// Returns all indexed paths
     pub fn indexed_paths(&self) -> Vec<String> {
         let mut paths = Vec::new();
         let mut offset = self.path_data as usize;
@@ -234,10 +272,15 @@ impl Index {
         }
         paths
     }
-    pub fn name(&self, file_id: usize) -> String {
-        let offset = self.extract_data(self.name_index + 4 * file_id);
+
+    /// Returns the name of a file identified by file_id
+    pub fn name(&self, file_id: FileID) -> String {
+        let file_id_usize = file_id as usize;
+        let offset = self.extract_data(self.name_index + 4 * file_id_usize);
         self.extract_string_at((self.name_data + offset) as usize)
     }
+
+    /// Extract a null-terminated string from `offset`
     fn extract_string_at(&self, offset: usize) -> String {
         let mut index = 0;
         let mut s = String::new();
@@ -250,6 +293,8 @@ impl Index {
             s
         }
     }
+
+    /// Returns the offset and size of a list
     fn find_list(&self, trigram: u32) -> (isize, u32) {
         let d: &[u8] = unsafe {
             let s = self.data.as_slice();
@@ -317,7 +362,10 @@ struct PostReader<'a, 'b> {
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
-    fn new(index: &'a Index, trigram: u32, restrict: &'b mut Option<Vec<u32>>) -> Option<Self> {
+    pub fn new(index: &'a Index,
+               trigram: u32,
+               restrict: &'b mut Option<Vec<u32>>) -> Option<Self>
+    {
         let (count, offset) = index.find_list(trigram);
         if count == 0 {
             return None;

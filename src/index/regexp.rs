@@ -10,6 +10,7 @@ use std::hash::Hash;
 // use regex::Regex;
 use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
 
+/// Operation on a Query
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum QueryOperation {
     All,
@@ -19,6 +20,8 @@ pub enum QueryOperation {
 }
 
 
+/// A structure, similar to a regular expression, that uses
+/// composed trigrams to find matches in text.
 #[derive(Debug)]
 pub struct Query {
     pub operation: QueryOperation,

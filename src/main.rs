@@ -115,7 +115,7 @@ empty, $HOME/.csearchindex.
         let file_pattern = regex::Regex::new(&file_pattern_str)
             .expect("Invalid file pattern supplied!");
         post = post.iter().filter(|&file_id| {
-            let name = i.name(*file_id as usize);
+            let name = i.name(*file_id);
             file_pattern.is_match(&name)
         }).cloned().collect::<Vec<_>>();
     }
@@ -124,7 +124,7 @@ empty, $HOME/.csearchindex.
     let g = grep::grep::Grep::new(match_options.pattern.clone());
     let mut line_printer = LinePrinter::new(&match_options);
     for file_id in post {
-        let name = i.name(file_id as usize);
+        let name = i.name(file_id);
         let maybe_g_it = g.open(name.clone());
         let g_it = if let Ok(g_it) = maybe_g_it {
             g_it
