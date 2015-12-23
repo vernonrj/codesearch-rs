@@ -456,9 +456,9 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
     }
     // We are creating an AND of ORs or an OR of ANDs.
     // Factor out common trigrams, if any.
-    let common = q.trigram.intersection(&r.trigram).cloned().collect();
-    q.trigram = q.trigram.difference(&common).cloned().collect();
-    r.trigram = r.trigram.difference(&common).cloned().collect();
+    let common = intersection(&q.trigram, &r.trigram);
+    q.trigram = difference(&q.trigram, &common);
+    r.trigram = difference(&r.trigram, &common);
     if common.len() > 0 {
         // If there were common trigrams, rewrite
         //
@@ -484,14 +484,14 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
             trigram: common,
             sub: Vec::new()
         };
-        return and_or(t, s, new_operation);
-    }
-
-    // Otherwise just create the op.
-    Query {
-        operation: operation,
-        trigram: HashSet::new(),
-        sub: vec![q, r]
+        and_or(t, s, new_operation)
+    } else {
+        // Otherwise just create the op.
+        Query {
+            operation: operation,
+            trigram: HashSet::new(),
+            sub: vec![q, r]
+        }
     }
 }
 
@@ -533,4 +533,12 @@ impl Iterator for CharRangeIter {
 
 fn union<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
     s.union(t).cloned().collect()
+}
+
+fn intersection<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
+    s.intersection(t).cloned().collect()
+}
+
+fn difference<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
+    s.difference(t).cloned().collect()
 }
