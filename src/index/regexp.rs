@@ -101,33 +101,32 @@ impl RegexInfo {
             | &Expr::StartLine | &Expr::EndLine
             | &Expr::StartText | &Expr::EndText
             | &Expr::WordBoundary | &Expr::NotWordBoundary => {
-                return Self::empty_string();
+                Self::empty_string()
             },
-            &Expr::Literal {ref chars, ref casei} => {
-                if *casei == true {
-                    match chars.len() {
-                        0 => return Self::empty_string(),
-                        1 => { 
-                            let re1 = Expr::Class(CharClass::new(vec![ClassRange {
-                                start: chars[0],
-                                end: chars[0]
-                            }]));
-                            return RegexInfo::new(&re1);
-                        },
-                        _ => ()
+            &Expr::Literal {ref chars, casei: true} => {
+                match chars.len() {
+                    0 => Self::empty_string(),
+                    1 => { 
+                        let re1 = Expr::Class(CharClass::new(vec![ClassRange {
+                            start: chars[0],
+                            end: chars[0]
+                        }]));
+                        RegexInfo::new(&re1)
+                    },
+                    _ => {
+                        // Multi-letter case-folded string:
+                        // treat as concatenation of single-letter case-folded strings.
+                        chars.iter().fold(Self::empty_string(), |info, c| {
+                            concat(info,
+                                   Self::new(&Expr::Literal {
+                                       chars: vec![*c],
+                                       casei: true
+                                   }))
+                        })
                     }
-                    // Multi-letter case-folded string:
-                    // treat as concatenation of single-letter case-folded strings.
-                    let mut info = Self::empty_string();
-                    for c in chars {
-                        let re1 = Expr::Literal {
-                            chars: vec![*c],
-                            casei: *casei
-                        };
-                        info = concat(info, Self::new(&re1))
-                    }
-                    return info;
                 }
+            },
+            &Expr::Literal {ref chars, casei: false} => {
                 let exact_set = {
                     let mut h = HashSet::<String>::new();
                     h.insert(chars.iter().cloned().collect());
@@ -142,24 +141,24 @@ impl RegexInfo {
                 }
             },
             &Expr::AnyChar | &Expr::AnyCharNoNL => {
-                return Self::any_char();
+                Self::any_char()
             },
             &Expr::Concat(ref v) => {
                 let analyzed = v.iter().map(RegexInfo::new);
-                return analyzed.fold(Self::empty_string(), concat);
+                analyzed.fold(Self::empty_string(), concat)
             },
             &Expr::Alternate(ref v) => {
                 let analyzed = v.iter().map(RegexInfo::new);
-                return analyzed.fold(Self::no_match(), alternate);
+                analyzed.fold(Self::no_match(), alternate)
             },
             &Expr::Repeat {ref e, ref r, /* ref greedy */ .. } => {
                 match r {
                     &Repeater::ZeroOrOne => {
-                        return alternate(RegexInfo::new(e), Self::empty_string());
+                        alternate(RegexInfo::new(e), Self::empty_string())
                     },
                     &Repeater::ZeroOrMore => {
                         // We don't know anything, so assume the worst.
-                        return Self::any_match();
+                        Self::any_match()
                     },
                     &Repeater::OneOrMore => {
                         // x+
@@ -172,16 +171,14 @@ impl RegexInfo {
                             info.suffix = i_s;
                             info.exact_set = None;
                         }
-                        return info;
+                        info
                     },
                     &Repeater::Range {..} => unimplemented!() /* is this needed? */
                 }
             },
+            &Expr::Class(ref charclass) if charclass.is_empty() => Self::no_match(),
             &Expr::Class(ref charclass) => {
                 let ranges = charclass.deref();
-                if ranges.is_empty() {
-                    return Self::no_match();
-                }
                 let mut info = RegexInfo {
                     can_empty: false,
                     exact_set: None,
@@ -202,12 +199,12 @@ impl RegexInfo {
                         h
                     };
                     if let Some(ref mut exact) = info.exact_set {
-                        *exact = exact.union(&next_range).cloned().collect();
+                        *exact = union(&exact, &next_range);
                     } else {
                         info.exact_set = Some(next_range);
                     }
                 }
-                return info;
+                info
             },
             _ => unimplemented!() /* Still have more cases to implement */
         }
@@ -222,11 +219,9 @@ impl RegexInfo {
         }
     }
     fn empty_string() -> Self {
-        let mut exact_set = HashSet::new();
-        exact_set.insert("".to_string());
         RegexInfo {
             can_empty: true,
-            exact_set: Some(exact_set),
+            exact_set: Some(Self::hashset_with_only_emptystring()),
             prefix: HashSet::new(),
             suffix: HashSet::new(),
             query: Query::all()
@@ -236,16 +231,8 @@ impl RegexInfo {
         RegexInfo {
             can_empty: false,
             exact_set: None,
-            prefix: {
-                let mut p = HashSet::new();
-                p.insert("".to_string());
-                p
-            },
-            suffix: {
-                let mut s = HashSet::new();
-                s.insert("".to_string());
-                s
-            },
+            prefix: Self::hashset_with_only_emptystring(),
+            suffix: Self::hashset_with_only_emptystring(),
             query: Query::all()
         }
     }
@@ -253,18 +240,15 @@ impl RegexInfo {
         RegexInfo {
             can_empty: true,
             exact_set: None,
-            prefix: {
-                let mut h = HashSet::new();
-                h.insert("".to_string());
-                h
-            },
-            suffix: {
-                let mut h = HashSet::new();
-                h.insert("".to_string());
-                h
-            },
+            prefix: Self::hashset_with_only_emptystring(),
+            suffix: Self::hashset_with_only_emptystring(),
             query: Query::new(QueryOperation::All)
         }
+    }
+    fn hashset_with_only_emptystring() -> HashSet<String> {
+        let mut h = HashSet::new();
+        h.insert("".to_string());
+        h
     }
 }
 
@@ -544,4 +528,8 @@ impl Iterator for CharRangeIter {
             Some(old_position)
         }
     }
+}
+
+fn union(s: &HashSet<String>, t: &HashSet<String>) -> HashSet<String> {
+    s.union(t).cloned().collect()
 }
