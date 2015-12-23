@@ -1,8 +1,10 @@
 /// Regular Expression matching
+use std::char;
 use std::collections::HashSet;
+use std::ops::Deref;
 
 // use regex::Regex;
-use regex_syntax::{Expr, Repeater};
+use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum QueryOperation {
@@ -106,17 +108,20 @@ impl RegexInfo {
                     match chars.len() {
                         0 => return Self::empty_string(),
                         1 => { 
-                            unimplemented!();
+                            let re1 = Expr::Class(CharClass::new(vec![ClassRange {
+                                start: chars[0],
+                                end: chars[0]
+                            }]));
+                            return RegexInfo::new(&re1);
                         },
                         _ => ()
                     }
                     // Multi-letter case-folded string:
                     // treat as concatenation of single-letter case-folded strings.
                     let mut info = Self::empty_string();
-                    for i in 0 .. chars.len() {
-                        let rune = vec![chars[i]];
+                    for c in chars {
                         let re1 = Expr::Literal {
-                            chars: rune,
+                            chars: vec![*c],
                             casei: *casei
                         };
                         info = concat(info, Self::new(&re1))
@@ -172,15 +177,37 @@ impl RegexInfo {
                     &Repeater::Range {..} => unimplemented!() /* is this needed? */
                 }
             },
-            &Expr::Class(_) => {
-                // let mut info = RegexInfo {
-                //     can_empty: false,
-                //     exact_set: None,
-                //     prefix: HashSet::new(),
-                //     suffix: HashSet::new(),
-                //     query: Query::all()
-                // };
-                unimplemented!(); // Don't know what to do from here...
+            &Expr::Class(ref charclass) => {
+                let ranges = charclass.deref();
+                if ranges.is_empty() {
+                    return Self::no_match();
+                }
+                let mut info = RegexInfo {
+                    can_empty: false,
+                    exact_set: None,
+                    prefix: HashSet::new(),
+                    suffix: HashSet::new(),
+                    query: Query::all()
+                };
+                for each_range in ranges {
+                    let &ClassRange { start: low, end: high } = each_range;
+                    let next_range: HashSet<String> = {
+                        let mut h = HashSet::new();
+                        let it = CharRangeIter::new(low, high).expect("expected valid range");
+                        for chr in it {
+                            let mut s = String::new();
+                            s.push(chr);
+                            h.insert(s);
+                        }
+                        h
+                    };
+                    if let Some(ref mut exact) = info.exact_set {
+                        *exact = exact.union(&next_range).cloned().collect();
+                    } else {
+                        info.exact_set = Some(next_range);
+                    }
+                }
+                return info;
             },
             _ => unimplemented!() /* Still have more cases to implement */
         }
@@ -243,7 +270,21 @@ impl RegexInfo {
 
 fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     let mut xy = RegexInfo::default();
-    xy.query = x.query.and(y.query);
+
+    // If all the possible strings in the cross product of x.suffix
+    // and y.prefix are long enough, then the trigram for one
+    // of them must be present and would not necessarily be
+    // accounted for in xy.prefix or xy.suffix yet.  Cut things off
+    // at maxSet just to keep the sets manageable.
+    xy.query = if x.exact_set.is_none() && y.exact_set.is_none()
+        && x.suffix.len() <= 20 && y.prefix.len() <= 20
+        && (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3
+    {
+        and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
+    } else {
+        x.query.and(y.query)
+    };
+
     if let (&Some(ref x_s), &Some(ref y_s)) = (&x.exact_set, &y.exact_set) {
         xy.exact_set = Some(cross_product(&x_s, &y_s));
     } else {
@@ -267,17 +308,6 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
         }
     }
 
-	// If all the possible strings in the cross product of x.suffix
-	// and y.prefix are long enough, then the trigram for one
-	// of them must be present and would not necessarily be
-	// accounted for in xy.prefix or xy.suffix yet.  Cut things off
-	// at maxSet just to keep the sets manageable.
-    if x.exact_set.is_none() && y.exact_set.is_none()
-        && x.suffix.len() <= 20 && y.prefix.len() <= 20
-        && (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3
-    {
-        xy.query = and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix));
-    }
     xy
 }
 
@@ -366,6 +396,8 @@ fn and_trigrams(q: Query, t: &HashSet<String>) -> Query {
     let mut or = Query::none();
     for t_string in t {
         let mut trigram = HashSet::<String>::new();
+        // NOTE: the .windows() slice method would be better here,
+        //       but it doesn't seem to be available for chars
         for i in 0 .. (t_string.len() - 2) {
             trigram.insert(t_string[i .. i + 3].to_string());
         }
@@ -393,9 +425,9 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
         r
     };
 
-	// Boolean simplification.
-	// If q ⇒ r, q AND r ≡ q.
-	// If q ⇒ r, q OR r ≡ r.
+    // Boolean simplification.
+    // If q ⇒ r, q AND r ≡ q.
+    // If q ⇒ r, q OR r ≡ r.
     if q.implies(&r) {
         if operation == QueryOperation::And {
             return q;
@@ -410,8 +442,8 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
             return q;
         }
     }
-	// Both q and r are QAnd or QOr.
-	// If they match or can be made to match, merge.
+    // Both q and r are QAnd or QOr.
+    // If they match or can be made to match, merge.
     let is_q_atom = q.trigram.len() == 1 && q.sub.len() == 0;
     let is_r_atom = r.trigram.len() == 1 && r.sub.len() == 0;
     if q.operation == operation && (r.operation == operation || is_r_atom) {
@@ -428,7 +460,7 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
         q.trigram = q.trigram.union(&r.trigram).cloned().collect();
         return q;
     }
-	// If one matches the op, add the other to it.
+    // If one matches the op, add the other to it.
     if q.operation == operation {
         q.sub.push(r);
         return q;
@@ -437,25 +469,25 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
         r.sub.push(q);
         return r;
     }
-	// We are creating an AND of ORs or an OR of ANDs.
-	// Factor out common trigrams, if any.
+    // We are creating an AND of ORs or an OR of ANDs.
+    // Factor out common trigrams, if any.
     let common = q.trigram.intersection(&r.trigram).cloned().collect();
     q.trigram = q.trigram.difference(&common).cloned().collect();
     r.trigram = r.trigram.difference(&common).cloned().collect();
     if common.len() > 0 {
-		// If there were common trigrams, rewrite
-		//
-		//	(abc|def|ghi|jkl) AND (abc|def|mno|prs) =>
-		//		(abc|def) OR ((ghi|jkl) AND (mno|prs))
-		//
-		//	(abc&def&ghi&jkl) OR (abc&def&mno&prs) =>
-		//		(abc&def) AND ((ghi&jkl) OR (mno&prs))
-		//
-		// Build up the right one of
-		//	(ghi|jkl) AND (mno|prs)
-		//	(ghi&jkl) OR (mno&prs)
-		// Call andOr recursively in case q and r can now be simplified
-		// (we removed some trigrams).
+        // If there were common trigrams, rewrite
+        //
+        //    (abc|def|ghi|jkl) AND (abc|def|mno|prs) =>
+        //        (abc|def) OR ((ghi|jkl) AND (mno|prs))
+        //
+        //    (abc&def&ghi&jkl) OR (abc&def&mno&prs) =>
+        //        (abc&def) AND ((ghi&jkl) OR (mno&prs))
+        //
+        // Build up the right one of
+        //    (ghi|jkl) AND (mno|prs)
+        //    (ghi&jkl) OR (mno&prs)
+        // Call andOr recursively in case q and r can now be simplified
+        // (we removed some trigrams).
         let s = and_or(q, r, operation);
         let new_operation = match operation {
             QueryOperation::And => QueryOperation::Or,
@@ -470,10 +502,46 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
         return and_or(t, s, new_operation);
     }
 
-	// Otherwise just create the op.
+    // Otherwise just create the op.
     Query {
         operation: operation,
         trigram: HashSet::new(),
         sub: vec![q, r]
+    }
+}
+
+
+struct CharRangeIter {
+    low: char,
+    high: char,
+    position: char
+}
+
+impl CharRangeIter {
+    fn new(low: char, high: char) -> Option<Self> {
+        if (low as u32) > (high as u32) {
+            None
+        } else if low > char::MAX || high > char::MAX {
+            None
+        } else {
+            Some(CharRangeIter {
+                low: low,
+                high: high,
+                position: low
+            })
+        }
+    }
+}
+
+impl Iterator for CharRangeIter {
+    type Item = char;
+    fn next(&mut self) -> Option<Self::Item> {
+        if (self.position as u32) > (self.high as u32) {
+            None
+        } else {
+            let old_position = self.position;
+            self.position = char::from_u32(self.position as u32 + 1).unwrap();
+            Some(old_position)
+        }
     }
 }

@@ -63,19 +63,25 @@ empty, $HOME/.csearchindex.
              .long("brute")
              .help("brute force - search all files in the index"))
         .get_matches();
-    let pattern = matches.value_of("PATTERN").unwrap();
+    let mut pattern: String = matches.value_of("PATTERN").unwrap().to_string();
+    pattern = "(?m)".to_string() + &pattern;
+    let ignore_case = matches.is_present("ignore-case");
+    if ignore_case {
+        pattern = "(?i)".to_string() + &pattern;
+    }
     let match_options = csearch_regex::matcher::MatchOptions {
-        pattern: regex::Regex::new(pattern.clone()).unwrap(),
+        // TODO: Catch bad regex earlier, maybe print a nice message
+        pattern: regex::Regex::new(&pattern.clone()).expect("Invalid pattern supplied!"),
         print_count: matches.is_present("count"),
         file_pattern: matches.value_of("FILE_PATTERN").map(|s| regex::Regex::new(s).unwrap()),
-        ignore_case: matches.is_present("ignore-case"),
+        ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
         line_number: matches.is_present("line-number"),
         max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap())
     };
     // println!("{:?}", match_options);
     let i = index::read::Index::open("/home/vernon/.csearchindex").unwrap();
-    let expr = regex_syntax::Expr::parse(pattern.clone()).unwrap();
+    let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
 
     let post = i.query(q, None);
