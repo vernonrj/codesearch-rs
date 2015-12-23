@@ -8,7 +8,6 @@ use regex::Regex;
 pub struct MatchOptions {
     pub pattern: Regex,
     pub print_count: bool,
-    pub file_pattern: Option<Regex>,
     pub ignore_case: bool,
     pub files_with_matches_only: bool,
     pub line_number: bool,

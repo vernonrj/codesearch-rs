@@ -72,7 +72,6 @@ empty, $HOME/.csearchindex.
         // TODO: Catch bad regex earlier, maybe print a nice message
         pattern: regex::Regex::new(&pattern.clone()).expect("Invalid pattern supplied!"),
         print_count: matches.is_present("count"),
-        file_pattern: matches.value_of("FILE_PATTERN").map(|s| regex::Regex::new(s).unwrap()),
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
         line_number: matches.is_present("line-number"),
@@ -83,13 +82,16 @@ empty, $HOME/.csearchindex.
     let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
 
-    let post = i.query(q, None);
+    let mut post = i.query(q, None);
 
-    // TODO: used for file filtering
-    // let file_ids = post.iter().filter(|&file_id| {
-    //     let name = i.name(*file_id as usize);
-    //     re.is_match(&name)
-    // }).collect::<Vec<_>>();
+    if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
+        let file_pattern = regex::Regex::new(&file_pattern_str)
+            .expect("Invalid file pattern supplied!");
+        post = post.iter().filter(|&file_id| {
+            let name = i.name(*file_id as usize);
+            file_pattern.is_match(&name)
+        }).cloned().collect::<Vec<_>>();
+    }
 
     let g = grep::grep::Grep::new(match_options.pattern.clone(),
                                   &match_options);
