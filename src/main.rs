@@ -12,6 +12,7 @@ mod index;
 mod grep;
 
 use std::io::Write;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct MatchOptions {
@@ -116,7 +117,7 @@ empty, $HOME/.csearchindex.
 
     // Search all possibly matching files for matches, printing the matching lines
     let g = grep::grep::Grep::new(match_options.pattern.clone());
-    let mut line_printer = LinePrinter::new(match_options);
+    let mut line_printer = LinePrinter::new(&match_options);
     for file_id in post {
         let name = i.name(file_id as usize);
         let maybe_g_it = g.open(name.clone());
@@ -132,20 +133,25 @@ empty, $HOME/.csearchindex.
             line_printer.print_line(&name, &each_line);
         }
     }
+    if match_options.print_count {
+        for (k, v) in line_printer.num_matches {
+            println!("{}: {}", k, v);
+        }
+    }
 
 }
 
-struct LinePrinter {
-    options: MatchOptions,
-    num_matches: usize
+struct LinePrinter<'a> {
+    options: &'a MatchOptions,
+    num_matches: HashMap<String, usize>
 }
 
 
-impl LinePrinter {
-    fn new(options: MatchOptions) -> Self {
+impl<'a> LinePrinter<'a> {
+    fn new(options: &'a MatchOptions) -> Self {
         LinePrinter {
             options: options,
-            num_matches: 0
+            num_matches: HashMap::new()
         }
     }
     fn all_lines_printed(&self) -> bool {
@@ -158,8 +164,17 @@ impl LinePrinter {
     fn only_filenames_printed(&self) -> bool {
         self.options.files_with_matches_only
     }
+    fn increment_file_match(&mut self, filename: &str) {
+        if self.num_matches.contains_key(filename) {
+            let mut n = self.num_matches.get_mut(filename)
+                                        .expect("expected filename key to exist");
+            *n += 1;
+        } else {
+            self.num_matches.insert(filename.to_string(), 1);
+        }
+    }
     fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) {
-        self.num_matches += 1;
+        self.increment_file_match(filename);
         if self.all_lines_printed() {
             let mut out_line = String::new();
             out_line.push_str(filename);
