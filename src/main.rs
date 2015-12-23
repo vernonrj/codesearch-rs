@@ -10,9 +10,18 @@ extern crate varint;
 
 mod index;
 mod grep;
-mod csearch_regex;
 
 use std::io::Write;
+
+#[derive(Debug)]
+pub struct MatchOptions {
+    pub pattern: regex::Regex,
+    pub print_count: bool,
+    pub ignore_case: bool,
+    pub files_with_matches_only: bool,
+    pub line_number: bool,
+    pub max_count: Option<usize>
+}
 
 fn main() {
     let matches = clap::App::new("csearch")
@@ -62,13 +71,19 @@ empty, $HOME/.csearchindex.
              .long("brute")
              .help("brute force - search all files in the index"))
         .get_matches();
+
+    // get the pattern provided by the user
     let mut pattern: String = matches.value_of("PATTERN").unwrap().to_string();
     pattern = "(?m)".to_string() + &pattern;
+
+    // possibly add ignore case flag to the pattern
     let ignore_case = matches.is_present("ignore-case");
     if ignore_case {
         pattern = "(?i)".to_string() + &pattern;
     }
-    let match_options = csearch_regex::matcher::MatchOptions {
+
+    // combine cmdline options used for matching/output into a structure
+    let match_options = MatchOptions {
         // TODO: Catch bad regex earlier, maybe print a nice message
         pattern: regex::Regex::new(&pattern.clone()).expect("Invalid pattern supplied!"),
         print_count: matches.is_present("count"),
@@ -77,13 +92,19 @@ empty, $HOME/.csearchindex.
         line_number: matches.is_present("line-number"),
         max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap())
     };
-    // println!("{:?}", match_options);
+
+    // Get the index from file
+    // TODO: don't hardcode index location
     let i = index::read::Index::open("/home/vernon/.csearchindex").unwrap();
+
+    // Get the pseudo-regexp (built using trigrams)
     let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
 
+    // Find all possibly matching files using the pseudo-regexp
     let mut post = i.query(q, None);
 
+    // If provided, filter possibly matching files via FILE_PATTERN
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
         let file_pattern = regex::Regex::new(&file_pattern_str)
             .expect("Invalid file pattern supplied!");
@@ -93,25 +114,65 @@ empty, $HOME/.csearchindex.
         }).cloned().collect::<Vec<_>>();
     }
 
-    let g = grep::grep::Grep::new(match_options.pattern.clone(),
-                                  &match_options);
+    // Search all possibly matching files for matches, printing the matching lines
+    let g = grep::grep::Grep::new(match_options.pattern.clone());
+    let mut line_printer = LinePrinter::new(match_options);
     for file_id in post {
         let name = i.name(file_id as usize);
-        let maybe_g_it = g.open(name);
+        let maybe_g_it = g.open(name.clone());
         if let Err(cause) = maybe_g_it {
             writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
             continue;
         }
         let g_it = maybe_g_it.unwrap();
         for each_line in g_it {
-            match each_line {
-                Ok(line) => println!("{}", line),
-                Err(cause) => {
-                    writeln!(&mut std::io::stderr(),
-                             "failed to read line: {}", cause).unwrap();
-                }
-            };
+            line_printer.print_line(&name, &each_line);
         }
     }
 
 }
+
+struct LinePrinter {
+    options: MatchOptions,
+    num_matches: usize
+}
+
+
+impl LinePrinter {
+    fn new(options: MatchOptions) -> Self {
+        LinePrinter {
+            options: options,
+            num_matches: 0
+        }
+    }
+    fn all_lines_printed(&self) -> bool {
+        if self.options.print_count || self.options.files_with_matches_only {
+            false
+        } else {
+            true
+        }
+    }
+    fn only_filenames_printed(&self) -> bool {
+        self.options.files_with_matches_only
+    }
+    fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) {
+        self.num_matches += 1;
+        if self.all_lines_printed() {
+            let mut out_line = String::new();
+            out_line.push_str(filename);
+            out_line.push_str(":");
+            if self.options.line_number {
+                out_line.push_str(&(result.line_number + 1).to_string()); // 0-based to 1-based
+                out_line.push_str(":");
+            }
+            out_line.push_str(&result.line);
+            println!("{}", out_line);
+        } else if self.only_filenames_printed() {
+            unimplemented!();
+        } else {
+            return;
+        }
+    }
+}
+
+
