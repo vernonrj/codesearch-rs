@@ -10,7 +10,10 @@ extern crate regex_syntax;
 extern crate varint;
 
 mod index;
+mod grep;
 mod csearch_regex;
+
+use std::io::Write;
 
 fn main() {
     let matches = clap::App::new("csearch")
@@ -70,7 +73,7 @@ empty, $HOME/.csearchindex.
         line_number: matches.is_present("line-number"),
         max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap())
     };
-    println!("{:?}", match_options);
+    // println!("{:?}", match_options);
     let i = index::read::Index::open("/home/vernon/.csearchindex").unwrap();
     let expr = regex_syntax::Expr::parse(pattern.clone()).unwrap();
     let q = index::regexp::RegexInfo::new(&expr).query;
@@ -83,9 +86,27 @@ empty, $HOME/.csearchindex.
     //     re.is_match(&name)
     // }).collect::<Vec<_>>();
 
+    let g = grep::grep::Grep::new(match_options.pattern.clone(),
+                                  &match_options);
     for file_id in post {
         let name = i.name(file_id as usize);
-        println!("name = {}", name);
+        let maybe_g_it = g.open(name);
+        match maybe_g_it {
+            Ok(g_it) => {
+                for each_line in g_it {
+                    match each_line {
+                        Ok(line) => println!("{}", line),
+                        Err(cause) => {
+                            writeln!(&mut std::io::stderr(),
+                                     "failed to read line: {}", cause).unwrap();
+                        }
+                    };
+                }
+            },
+            Err(cause) => {
+                writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
+            }
+        }
     }
 
 }
