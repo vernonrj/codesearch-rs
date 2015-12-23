@@ -98,21 +98,19 @@ empty, $HOME/.csearchindex.
     for file_id in post {
         let name = i.name(file_id as usize);
         let maybe_g_it = g.open(name);
-        match maybe_g_it {
-            Ok(g_it) => {
-                for each_line in g_it {
-                    match each_line {
-                        Ok(line) => println!("{}", line),
-                        Err(cause) => {
-                            writeln!(&mut std::io::stderr(),
-                                     "failed to read line: {}", cause).unwrap();
-                        }
-                    };
+        if let Err(cause) = maybe_g_it {
+            writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
+            continue;
+        }
+        let g_it = maybe_g_it.unwrap();
+        for each_line in g_it {
+            match each_line {
+                Ok(line) => println!("{}", line),
+                Err(cause) => {
+                    writeln!(&mut std::io::stderr(),
+                             "failed to read line: {}", cause).unwrap();
                 }
-            },
-            Err(cause) => {
-                writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
-            }
+            };
         }
     }
 
