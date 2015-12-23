@@ -120,11 +120,14 @@ empty, $HOME/.csearchindex.
     for file_id in post {
         let name = i.name(file_id as usize);
         let maybe_g_it = g.open(name.clone());
-        if let Err(cause) = maybe_g_it {
+        let g_it = if let Ok(g_it) = maybe_g_it {
+            g_it
+        } else if let Err(cause) = maybe_g_it {
             writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
             continue;
-        }
-        let g_it = maybe_g_it.unwrap();
+        } else {
+            panic!("Ok, Err have been covered, but result is neither!");
+        };
         for each_line in g_it {
             line_printer.print_line(&name, &each_line);
         }
