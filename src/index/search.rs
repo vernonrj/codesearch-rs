@@ -1,4 +1,8 @@
-/// Copy of go's sort.Search function
+// Copyright 2015 Vernon Jones.
+// Original code Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 use num::traits::{Num, FromPrimitive};
 
 pub fn search<I, F>(n: I, f: F) -> I

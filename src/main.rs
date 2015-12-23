@@ -1,3 +1,8 @@
+// Copyright 2015 Vernon Jones.
+// Original code Copyright 2011 The Go Authors.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 
 extern crate byteorder;
 #[macro_use]
@@ -27,7 +32,7 @@ pub struct MatchOptions {
 fn main() {
     let matches = clap::App::new("csearch")
         .version(&crate_version!()[..])
-        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright the Go authors)")
+        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
         .about("
 Csearch behaves like grep over all indexed files, searching for regexp,
 an RE2 (nearly PCRE) regular expression.

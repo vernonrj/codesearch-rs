@@ -1,4 +1,6 @@
-/// Search files for matches
+// Copyright 2015 Vernon Jones.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 use regex::Regex;
 use std::io::{self, BufRead, BufReader, Write};

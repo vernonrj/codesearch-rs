@@ -1,4 +1,7 @@
-/// Regular Expression matching
+// Copyright 2015 Vernon Jones.
+// Original code Copyright 2011 The Go Authors.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 use std::char;
 use std::collections::HashSet;
 use std::ops::Deref;
