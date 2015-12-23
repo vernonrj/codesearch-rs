@@ -2,6 +2,7 @@
 use std::char;
 use std::collections::HashSet;
 use std::ops::Deref;
+use std::hash::Hash;
 
 // use regex::Regex;
 use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
@@ -278,14 +279,14 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
             xy.prefix = if x.can_empty {
                 x.prefix
             } else {
-                x.prefix.union(&y.prefix).cloned().collect()
+                union(&x.prefix, &y.prefix)
             };
         }
         if let &Some(ref y_s) = &y.exact_set {
             xy.suffix = cross_product(&x.suffix, &y_s);
         } else {
             xy.suffix = if y.can_empty {
-                y.suffix.union(&x.suffix).cloned().collect()
+                union(&y.suffix, &x.suffix)
             } else {
                 y.suffix
             }
@@ -302,21 +303,21 @@ fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     let mut xy = RegexInfo::default();
     match (&x.exact_set, &y.exact_set) {
         (&Some(ref x_s), &Some(ref y_s)) => {
-            xy.exact_set = Some(x_s.union(y_s).cloned().collect());
+            xy.exact_set = Some(union(&x_s, y_s));
         },
         (&Some(ref x_s), &None) => {
-            xy.prefix = x_s.union(&y.prefix).cloned().collect();
-            xy.suffix = x_s.union(&y.suffix).cloned().collect();
+            xy.prefix = union(&x_s, &y.prefix);
+            xy.suffix = union(&x_s, &y.suffix);
             x.query = and_trigrams(x.query, x_s);
         },
         (&None, &Some(ref y_s)) => {
-            xy.prefix = x.prefix.union(&y_s).cloned().collect();
-            xy.suffix = x.suffix.union(&y_s).cloned().collect();
+            xy.prefix = union(&x.prefix, &y_s);
+            xy.suffix = union(&x.suffix, &y_s);
             y.query = and_trigrams(y.query, y_s);
         },
         _ => {
-            xy.prefix = x.prefix.union(&y.prefix).cloned().collect();
-            xy.suffix = x.suffix.union(&y.suffix).cloned().collect();
+            xy.prefix = union(&x.prefix, &y.prefix);
+            xy.suffix = union(&x.suffix, &y.suffix);
         }
     }
     xy.can_empty = x.can_empty || y.can_empty;
@@ -431,17 +432,17 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
     let is_q_atom = q.trigram.len() == 1 && q.sub.len() == 0;
     let is_r_atom = r.trigram.len() == 1 && r.sub.len() == 0;
     if q.operation == operation && (r.operation == operation || is_r_atom) {
-        q.trigram = q.trigram.union(&r.trigram).cloned().collect();
+        q.trigram = union(&q.trigram, &r.trigram);
         q.sub.append(&mut r.sub);
         return q;
     }
     if r.operation == operation && is_q_atom {
-        r.trigram = r.trigram.union(&q.trigram).cloned().collect();
+        r.trigram = union(&r.trigram, &q.trigram);
         return r;
     }
     if is_q_atom && is_r_atom {
         q.operation = operation;
-        q.trigram = q.trigram.union(&r.trigram).cloned().collect();
+        q.trigram = union(&q.trigram, &r.trigram);
         return q;
     }
     // If one matches the op, add the other to it.
@@ -530,6 +531,6 @@ impl Iterator for CharRangeIter {
     }
 }
 
-fn union(s: &HashSet<String>, t: &HashSet<String>) -> HashSet<String> {
+fn union<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
     s.union(t).cloned().collect()
 }
