@@ -240,9 +240,9 @@ impl Index {
         self.extract_string_at((self.name_data + offset) as usize)
     }
     fn extract_string_at(&self, offset: usize) -> String {
+        let mut index = 0;
+        let mut s = String::new();
         unsafe {
-            let mut index = 0;
-            let mut s = String::new();
             let sl = self.as_slice();
             while sl[offset + index] != 0 {
                 s.push(sl[offset+index] as char);

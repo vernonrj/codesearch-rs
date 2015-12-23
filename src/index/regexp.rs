@@ -343,10 +343,6 @@ fn cross_product(s: &HashSet<String>, t: &HashSet<String>) -> HashSet<String> {
     p
 }
 
-fn is_subset_of(lhs: &Vec<String>, rhs: &Vec<String>) -> bool {
-    lhs.iter().all(|s| rhs.contains(s))
-}
-
 fn trigrams_imply(trigram: &HashSet<String>, rhs: &Query) -> bool {
     match rhs.operation {
         QueryOperation::Or => {
@@ -378,20 +374,19 @@ fn and_trigrams(q: Query, t: &HashSet<String>) -> Query {
         // q AND ALL = q.
         return q;
     }
-    let mut or = Query::none();
-    for t_string in t {
+    let or = t.iter().fold(Query::none(), |or, t_string| {
         let mut trigram = HashSet::<String>::new();
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
         for i in 0 .. (t_string.len() - 2) {
             trigram.insert(t_string[i .. i + 3].to_string());
         }
-        or = or.or(Query {
+        or.or(Query {
             operation: QueryOperation::And,
             trigram: trigram,
             sub: Vec::new()
-        });
-    }
+        })
+    });
     q.and(or)
 }
 
@@ -497,7 +492,8 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
 
 
 struct CharRangeIter {
-    low: char,
+    #[allow(dead_code)]
+    low: char, // here to make debugging easier
     high: char,
     position: char
 }
