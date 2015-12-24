@@ -1,7 +1,7 @@
 Code Search is a tool for indexing and then performing
 regular expression searches over large bodies of source code.
-It is a set of command-line programs written in Go.
-Binary downloads are available for those who do not have Go installed.
+It is a set of command-line programs written in rust.
+This version is a port of the original version written in Go to rust.
 See https://github.com/google/codesearch for the original version.
 
 For background and an overview of the commands,
