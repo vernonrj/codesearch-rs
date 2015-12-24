@@ -389,7 +389,6 @@ fn and_trigrams(q: Query, t: &HashSet<Trigram>) -> Query {
         // If there is a short string, we can't guarantee
         // that any trigrams must be present, so use ALL.
         // q AND ALL = q.
-        println!("min string len < 3: {}", min_string_len(t));
         return q;
     }
     let or = t.iter().fold(Query::none(), |or, t_string| {
