@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 use std::char;
 use std::collections::HashSet;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use std::hash::Hash;
 
 // use regex::Regex;
@@ -19,13 +19,14 @@ pub enum QueryOperation {
     Or
 }
 
+pub type Trigram = String;
 
 /// A structure, similar to a regular expression, that uses
 /// composed trigrams to find matches in text.
 #[derive(Debug)]
 pub struct Query {
     pub operation: QueryOperation,
-    pub trigram: HashSet<String>,
+    pub trigram: HashSet<Trigram>,
     pub sub: Vec<Query>
 }
 
@@ -90,9 +91,19 @@ impl Query {
     pub fn or(self, rhs: Query) -> Query {
         and_or(self, rhs, QueryOperation::Or)
     }
+    fn simplify(mut self) -> Query {
+        if self.trigram.len() == 0 && self.sub.len() == 1 {
+            self.sub.pop().unwrap()
+        } else {
+            self
+        }
+    }
+    pub fn is_atom(&self) -> bool {
+        self.trigram.len() == 1 && self.sub.is_empty()
+    }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RegexInfo {
     pub can_empty: bool,
     pub exact_set: Option<HashSet<String>>,
@@ -337,7 +348,7 @@ fn min_string_len(xs: &HashSet<String>) -> usize {
 }
 
 /// Returns the cross product of s and t
-fn cross_product(s: &HashSet<String>, t: &HashSet<String>) -> HashSet<String> {
+fn cross_product(s: &HashSet<Trigram>, t: &HashSet<Trigram>) -> HashSet<Trigram> {
     let mut p = HashSet::new();
     for s_string in s {
         for t_string in t {
@@ -349,7 +360,7 @@ fn cross_product(s: &HashSet<String>, t: &HashSet<String>) -> HashSet<String> {
     p
 }
 
-fn trigrams_imply(trigram: &HashSet<String>, rhs: &Query) -> bool {
+fn trigrams_imply(trigram: &HashSet<Trigram>, rhs: &Query) -> bool {
     match rhs.operation {
         QueryOperation::Or => {
             if rhs.sub.iter().any(|s| trigrams_imply(trigram, s)) {
@@ -373,15 +384,16 @@ fn trigrams_imply(trigram: &HashSet<String>, rhs: &Query) -> bool {
     }
 }
 
-fn and_trigrams(q: Query, t: &HashSet<String>) -> Query {
+fn and_trigrams(q: Query, t: &HashSet<Trigram>) -> Query {
     if min_string_len(t) < 3 {
         // If there is a short string, we can't guarantee
         // that any trigrams must be present, so use ALL.
         // q AND ALL = q.
+        println!("min string len < 3: {}", min_string_len(t));
         return q;
     }
     let or = t.iter().fold(Query::none(), |or, t_string| {
-        let mut trigram = HashSet::<String>::new();
+        let mut trigram = HashSet::<Trigram>::new();
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
         for i in 0 .. (t_string.len() - 2) {
@@ -399,17 +411,9 @@ fn and_trigrams(q: Query, t: &HashSet<String>) -> Query {
 /**
  * returns self OP other, possibly reusing self and other's storage.
  */
-fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
-    let mut q = if q.trigram.len() == 0 && q.sub.len() == 1 {
-        q.sub.pop().unwrap()
-    } else {
-        q
-    };
-    let mut r = if r.trigram.len() == 0 && r.sub.len() == 1 {
-        r.sub.pop().unwrap()
-    } else {
-        r
-    };
+fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
+    let mut q = q.simplify();
+    let mut r = r.simplify();
 
     // Boolean simplification.
     // If q ⇒ r, q AND r ≡ q.
@@ -430,18 +434,16 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
     }
     // Both q and r are QAnd or QOr.
     // If they match or can be made to match, merge.
-    let is_q_atom = q.trigram.len() == 1 && q.sub.len() == 0;
-    let is_r_atom = r.trigram.len() == 1 && r.sub.len() == 0;
-    if q.operation == operation && (r.operation == operation || is_r_atom) {
+    if q.operation == operation && (r.operation == operation || r.is_atom()) {
         q.trigram = union(&q.trigram, &r.trigram);
         q.sub.append(&mut r.sub);
         return q;
     }
-    if r.operation == operation && is_q_atom {
+    if r.operation == operation && q.is_atom() {
         r.trigram = union(&r.trigram, &q.trigram);
         return r;
     }
-    if is_q_atom && is_r_atom {
+    if q.is_atom() && r.is_atom() {
         q.operation = operation;
         q.trigram = union(&q.trigram, &r.trigram);
         return q;
@@ -460,7 +462,7 @@ fn and_or(mut q: Query, mut r: Query, operation: QueryOperation) -> Query {
     let common = intersection(&q.trigram, &r.trigram);
     q.trigram = difference(&q.trigram, &common);
     r.trigram = difference(&r.trigram, &common);
-    if common.len() > 0 {
+    if !common.is_empty() {
         // If there were common trigrams, rewrite
         //
         //    (abc|def|ghi|jkl) AND (abc|def|mno|prs) =>
