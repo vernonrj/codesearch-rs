@@ -130,8 +130,10 @@ empty, $HOME/.csearchindex.
 
     // Search all possibly matching files for matches, printing the matching lines
     let g = grep::grep::Grep::new(match_options.pattern.clone());
+    let max_count = match_options.max_count.clone();
     let mut line_printer = LinePrinter::new(&match_options);
-    for file_id in post {
+    let mut total_matches = 0;
+    'files: for file_id in post {
         let name = i.name(file_id);
         let maybe_g_it = g.open(name.clone());
         let g_it = if let Ok(g_it) = maybe_g_it {
@@ -143,6 +145,12 @@ empty, $HOME/.csearchindex.
             panic!("Ok, Err have been covered, but result is neither!");
         };
         for each_line in g_it {
+            total_matches += 1;
+            if let Some(ref m) = max_count {
+                if *m != 0 && total_matches > *m {
+                    break 'files;
+                }
+            }
             line_printer.print_line(&name, &each_line);
         }
     }
