@@ -16,6 +16,7 @@ use codesearch_lib::grep;
 
 use std::io::Write;
 use std::collections::HashMap;
+use std::env;
 
 #[derive(Debug)]
 pub struct MatchOptions {
@@ -74,6 +75,10 @@ empty, $HOME/.csearchindex.
         .arg(clap::Arg::with_name("bruteforce")
              .long("brute")
              .help("brute force - search all files in the index"))
+        .arg(clap::Arg::with_name("INDEX_FILE")
+             .long("indexpath")
+             .takes_value(true)
+             .help("use specified INDEX_FILE as the index path. overrides $CSEARCHINDEX."))
         .get_matches();
 
     // get the pattern provided by the user
@@ -85,6 +90,11 @@ empty, $HOME/.csearchindex.
     if ignore_case {
         pattern = "(?i)".to_string() + &pattern;
     }
+
+    // possibly override the csearchindex
+    matches.value_of("INDEX_FILE").map(|p| {
+        env::set_var("CSEARCHINDEX", p);
+    });
 
     // combine cmdline options used for matching/output into a structure
     let match_options = MatchOptions {
@@ -99,7 +109,8 @@ empty, $HOME/.csearchindex.
 
     // Get the index from file
     // TODO: don't hardcode index location
-    let i = index::read::Index::open("/home/vernon/.csearchindex").unwrap();
+    let index_path = index::read::csearch_index();
+    let i = index::read::Index::open(index_path).unwrap();
 
     // Get the pseudo-regexp (built using trigrams)
     let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
@@ -137,8 +148,16 @@ empty, $HOME/.csearchindex.
         }
     }
     if match_options.print_count {
-        for (k, v) in line_printer.num_matches {
+        let mut kv: Vec<_> = line_printer.num_matches.iter().collect();
+        kv.sort();
+        for (k, v) in kv {
             println!("{}: {}", k, v);
+        }
+    } else if match_options.files_with_matches_only {
+        let mut v: Vec<_> = line_printer.num_matches.keys().collect();
+        v.sort();
+        for k in v {
+            println!("{}", k);
         }
     }
 
@@ -189,7 +208,7 @@ impl<'a> LinePrinter<'a> {
             out_line.push_str(&result.line);
             println!("{}", out_line);
         } else if self.only_filenames_printed() {
-            unimplemented!();
+            return;
         } else {
             return;
         }
