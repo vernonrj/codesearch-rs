@@ -14,12 +14,14 @@ use std::path::Path;
  * an iterator for walking over matches in a file.
  *
  * ```no_run
- * extern crate regex;
- *
- * use regex::Regex;
- * use grep::grep::{Grep, GrepIter};
- *
- * # fn foo() -> Result<()> {
+ * # extern crate codesearch_lib;
+ * # extern crate regex;
+ * # use regex::Regex;
+ * # use codesearch_lib::grep::grep::Grep;
+ * # use codesearch_lib::grep::grep::GrepIter;
+ * # use std::io;
+ * # fn main() { foo(); }
+ * # fn foo() -> io::Result<()> {
  * let g = Grep::new(Regex::new(r"Pattern").unwrap());
  *
  * let it: GrepIter = try!(g.open("foo.txt"));
@@ -39,10 +41,12 @@ pub struct Grep {
 impl Grep {
     /// Takes a regular expression and returns a Grep instance
     ///
-    /// ```
+    /// ```rust
     /// # extern crate regex;
-    /// # use regex::Regex;
-    /// # fn foo() {
+    /// # extern crate codesearch_lib;
+    /// # use codesearch_lib::grep::grep::Grep;
+    /// use regex::Regex;
+    /// # fn main() {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
     /// # }
     /// ```
@@ -55,9 +59,13 @@ impl Grep {
     /// Takes a filename and returns a GrepIter. Fails if the file open fails.
     ///
     /// ```no_run
+    /// # extern crate codesearch_lib;
     /// # extern crate regex;
+    /// use std::io;
     /// # use regex::Regex;
-    /// # fn foo() {
+    /// # use codesearch_lib::grep::grep::{Grep, GrepIter};
+    /// # fn main() { foo(); }
+    /// # fn foo() -> io::Result<()> {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
     /// let it: GrepIter = try!(g.open("foo.txt"));
     /// # Ok(())

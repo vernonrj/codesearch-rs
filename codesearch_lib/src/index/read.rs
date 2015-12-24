@@ -86,13 +86,15 @@ pub type FileID = u32;
 
 /// Representation of an Index
 ///
-/// ```no_run
-/// extern crate regex_syntax;
-/// use regex_syntax::Expr;
-///
-/// use index::read::{Index, RegexInfo};
-///
-/// # fn foo() -> Result<()> {
+/// ```rust
+/// # extern crate regex_syntax;
+/// # extern crate codesearch_lib;
+/// # use codesearch_lib::index::read::Index;
+/// # use codesearch_lib::index::regexp::RegexInfo;
+/// # use regex_syntax::Expr;
+/// # use std::io;
+/// # fn main() { foo(); }
+/// # fn foo() -> io::Result<()> {
 /// let expr = Expr::parse(r"Pattern").unwrap();
 /// let q = RegexInfo::new(&expr).query;
 ///
@@ -143,8 +145,9 @@ impl Index {
     /// Open an index file from path
     ///
     /// ```no_run
-    /// # use index::read::Index;
-    /// # fn foo() -> Result<()> {
+    /// # use codesearch_lib::index::read::Index;
+    /// # use std::io;
+    /// # fn foo() -> io::Result<()> {
     /// let idx = try!(Index::open("foo.txt"));
     /// # Ok(())
     /// # }

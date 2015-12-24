@@ -108,7 +108,6 @@ empty, $HOME/.csearchindex.
     };
 
     // Get the index from file
-    // TODO: don't hardcode index location
     let index_path = index::read::csearch_index();
     let i = index::read::Index::open(index_path).unwrap();
 
