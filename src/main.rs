@@ -4,17 +4,15 @@
 // license that can be found in the LICENSE file.
 
 
-extern crate byteorder;
 #[macro_use]
 extern crate clap;
-extern crate memmap;
-extern crate num;
 extern crate regex;
 extern crate regex_syntax;
-extern crate varint;
 
-pub mod index;
-pub mod grep;
+extern crate codesearch_lib;
+
+use codesearch_lib::index;
+use codesearch_lib::grep;
 
 use std::io::Write;
 use std::collections::HashMap;

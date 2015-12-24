@@ -1,11 +1,13 @@
 [package]
-name = "codesearch"
+name = "codesearch_lib"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
 clap = "1.5.4"
+memmap = "0.2.3"
+byteorder = "0.4.2"
 regex = "0.1.44"
 regex-syntax = "0.2.2"
-
-codesearch_lib = { path = "codesearch_lib" }
+varint = "0.9.0"
+num = "0.1.29"
