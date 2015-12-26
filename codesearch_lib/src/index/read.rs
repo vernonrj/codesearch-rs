@@ -63,7 +63,6 @@
 //	offset of posting list index [4]
 //	"\ncsearch trailr\n"
 
-use std::env;
 use std::path::Path;
 use std::io;
 use std::fmt;
@@ -478,9 +477,3 @@ impl<'a, 'b> PostReader<'a, 'b> {
     }
 }
 
-pub fn csearch_index() -> String {
-    env::var("CSEARCHINDEX")
-        .or_else(|_| env::var("HOME").or_else(|_| env::var("USERPROFILE"))
-                        .map(|s| s + &"/.csearchindex"))
-        .expect("no valid path to index")
-}

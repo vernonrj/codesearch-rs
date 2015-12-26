@@ -4,6 +4,7 @@ extern crate num;
 extern crate regex;
 extern crate regex_syntax;
 extern crate varint;
+extern crate tempfile;
 
 pub mod index;
 pub mod grep;

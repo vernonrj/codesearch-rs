@@ -108,7 +108,7 @@ empty, $HOME/.csearchindex.
     };
 
     // Get the index from file
-    let index_path = index::read::csearch_index();
+    let index_path = index::csearch_index();
     let i = index::read::Index::open(index_path).unwrap();
 
     // Get the pseudo-regexp (built using trigrams)
