@@ -8,10 +8,9 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom, Read, BufWriter, Write};
 use std::io::{Error, ErrorKind};
-use std::path::Path;
-use std::ops::Deref;
 use std::ffi::OsString;
 use std::error;
+use std::fmt;
 
 use tempfile::TempFile;
 use byteorder::{BigEndian, WriteBytesExt};
@@ -38,16 +37,17 @@ const MAX_TEXT_TRIGRAMS: usize = 20000;
 const MAX_INVALID_UTF8_RATION: f64 = 0.0;
 const NPOST: usize = 64 << 20 / 8;
 
+#[derive(Debug)]
 pub struct IndexError {
     kind: IndexErrorKind,
     error: Box<error::Error + Send + Sync>
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexErrorKind {
     IoError,
     FileTooLong,
-    TooManyTrigrams,
-    Other
+    TooManyTrigrams
 }
 
 
@@ -60,6 +60,9 @@ impl IndexError {
             error: error.into()
         }
     }
+    pub fn kind(&self) -> IndexErrorKind {
+        self.kind.clone()
+    }
 }
 
 impl From<io::Error> for IndexError {
@@ -70,6 +73,23 @@ impl From<io::Error> for IndexError {
         }
     }
 }
+
+impl error::Error for IndexError {
+    fn description(&self) -> &str {
+        match self.kind {
+            IndexErrorKind::IoError => self.error.description(),
+            IndexErrorKind::FileTooLong => "file too long",
+            IndexErrorKind::TooManyTrigrams => "too many trigrams in file"
+        }
+    }
+}
+
+impl fmt::Display for IndexError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        self.error.fmt(fmt)
+    }
+}
+
 
 pub type IndexResult<T> = Result<T, IndexError>;
 
@@ -139,24 +159,26 @@ impl IndexWriter {
         }
         self.bytes_written += size as usize;
 
-        let file_id = self.add_name(filename);
+        let file_id = try!(self.add_name(filename));
         for each_trigram in trigram {
             if self.post.len() >= NPOST {
-                self.flush_post();
+                try!(self.flush_post());
             }
             self.post.push(PostEntry::new(each_trigram, file_id));
         }
         Ok(())
     }
-    fn add_name(&mut self, filename: OsString) -> u32 {
-        let offset = get_offset(&mut self.name_data).expect("failed to get offset!");
+    fn add_name(&mut self, filename: OsString) -> IndexResult<u32> {
+        let offset = try!(get_offset(&mut self.name_data));
         self.name_index.write_u32::<BigEndian>(offset as u32).unwrap();
         let s = filename.to_str().expect("filename has invalid UTF-8 chars");
-        Self::write_string(&mut self.name_data, s);
+        try!(Self::write_string(&mut self.name_data, s));
+
         self.name_data.write_u8(0).unwrap();
+
         let id = self.number_of_names_written;
         self.number_of_names_written += 1;
-        id as u32
+        Ok(id as u32)
     }
     fn flush_post(&mut self) -> io::Result<()> {
         self.post.sort();
@@ -165,16 +187,16 @@ impl IndexWriter {
             try!(f.write_u64::<BigEndian>(each.value()));
         }
         self.post = Vec::new();
-        f.seek(SeekFrom::Start(0));
+        try!(f.seek(SeekFrom::Start(0)));
         self.post_files.push(f);
         Ok(())
     }
-    fn write_string<W: Write>(writer: &mut BufWriter<W>, s: &str) {
-        writer.write(s.as_bytes()).unwrap();
+    pub fn write_string<W: Write>(writer: &mut BufWriter<W>, s: &str) -> io::Result<usize> {
+        writer.write(s.as_bytes())
     }
 }
 
-fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
+pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
     seekable.seek(SeekFrom::Current(0))
 }
 
@@ -288,7 +310,7 @@ impl TrigramIter {
         }
     }
     fn read_into_buf(&mut self) -> io::Result<usize> {
-        let mut reader = &mut self.reader;
+        let reader = &mut self.reader;
         self.buffer.with_buf_mut(|mut b| reader.read(&mut b))
     }
     fn next_char(&mut self) -> io::Result<Option<u8>> {
@@ -329,7 +351,15 @@ impl Iterator for TrigramIter {
         if self.num_read < 3 {
             return self.next();
         } else {
-            Some(self.current_value)
+            let b1 = (self.current_value >> 8) & 0xff;
+            let b2 = self.current_value & 0xff;
+            if b1 == 0x00 || b2 == 0x00 {
+                // Binary file. Skip
+                // TODO: log when a binary file causes a skip
+                None
+            } else {
+                Some(self.current_value)
+            }
         }
     }
 }

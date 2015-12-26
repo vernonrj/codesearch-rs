@@ -114,8 +114,8 @@ pub struct Index {
     post_data: u32,
     name_index: usize,
     post_index: usize,
-    num_name: usize,
-    num_post: usize
+    pub num_name: usize,
+    pub num_post: usize
 }
 
 impl Debug for Index {
