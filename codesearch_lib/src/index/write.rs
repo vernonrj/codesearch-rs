@@ -40,7 +40,7 @@ use index;
 const MAX_FILE_LEN: u64 = 1 << 30;
 const MAX_LINE_LEN: usize = 2000;
 const MAX_TEXT_TRIGRAMS: usize = 20000;
-const MAX_INVALID_UTF8_RATION: f64 = 0.0;
+const MAX_INVALID_UTF8_RATION: f64 = 0.1;
 const NPOST: usize = (64 << 20) / 8;
 
 #[derive(Debug)]
@@ -54,7 +54,8 @@ pub enum IndexErrorKind {
     IoError,
     FileTooLong,
     TooManyTrigrams,
-    BinaryDataPresent
+    BinaryDataPresent,
+    HighInvalidUtf8Ratio
 }
 
 
@@ -87,7 +88,8 @@ impl error::Error for IndexError {
             IndexErrorKind::IoError => self.error.description(),
             IndexErrorKind::FileTooLong => "file too long",
             IndexErrorKind::TooManyTrigrams => "too many trigrams in file",
-            IndexErrorKind::BinaryDataPresent => "binary data present in file"
+            IndexErrorKind::BinaryDataPresent => "binary data present in file",
+            IndexErrorKind::HighInvalidUtf8Ratio => "Too many invalid utf-8 sequences"
         }
     }
 }
@@ -103,7 +105,7 @@ pub type IndexResult<T> = Result<T, IndexError>;
 
 pub struct IndexWriter {
     buf: [u8; 8],
-    paths: Vec<String>,
+    paths: Vec<OsString>,
 
     name_data: TempFile,
     name_index: TempFile,
@@ -142,7 +144,7 @@ impl IndexWriter {
             index: BufWriter::new(f)
         }
     }
-    pub fn add_paths(&mut self, paths: Vec<String>) {
+    pub fn add_paths(&mut self, paths: Vec<OsString>) {
         self.paths.extend(paths);
     }
     pub fn add_file(&mut self, filename: OsString) -> IndexResult<()> {
@@ -157,10 +159,14 @@ impl IndexWriter {
                                        "file too long, ignoring"));
         }
         let mut trigram = HashSet::<u32>::new();
-        for each_trigram in TrigramIter::from_file(f) {
+        let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
+        for each_trigram in TrigramIter::from_file(f, max_utf8_invalid) {
             trigram.insert(try!(each_trigram));
         }
-        println!("indexing file {:?}, num trigrams = {}", filename, trigram.len());
+        println!("indexing file {:?}, num trigrams = {}, size = {}",
+                filename,
+                trigram.len(),
+                size);
         // TODO: add invalid trigram count checking
         if trigram.len() > MAX_TEXT_TRIGRAMS {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
@@ -198,7 +204,7 @@ impl IndexWriter {
         off[0] = get_offset(&mut self.index).unwrap();
 
         for p in &self.paths {
-            Self::write_string(&mut self.index, &p).unwrap();
+            Self::write_string(&mut self.index, p.to_str().unwrap()).unwrap();
             Self::write_string(&mut self.index, "\0").unwrap();
         }
         Self::write_string(&mut self.index, "\0").unwrap();
@@ -268,7 +274,6 @@ impl IndexWriter {
             v.write_unsigned_varint_32(0).unwrap();
             self.index.write(v.into_inner().deref()).unwrap();
 
-            // FIXME: is buf stil the right value?
             self.post_index.write(&mut self.buf[..3]).unwrap();
             Self::write_u32(&mut self.post_index, nfile).unwrap();
             Self::write_u32(&mut self.post_index, offset as u32).unwrap();
@@ -401,7 +406,9 @@ struct TrigramIter {
     reader: Box<Read>,
     buffer: RingBuffer,
     current_value: u32,
-    num_read: usize
+    num_read: usize,
+    inv_cnt: u64,
+    max_invalid: u64
 }
 
 impl TrigramIter {
@@ -410,15 +417,19 @@ impl TrigramIter {
             reader: r,
             buffer: RingBuffer::new(),
             current_value: 0,
-            num_read: 0
+            num_read: 0,
+            inv_cnt: 0,
+            max_invalid: 0
         }
     }
-    pub fn from_file(f: File) -> TrigramIter {
+    pub fn from_file(f: File, max_invalid: u64) -> TrigramIter {
         TrigramIter {
             reader: Box::new(f),
             buffer: RingBuffer::new(),
             current_value: 0,
-            num_read: 0
+            num_read: 0,
+            inv_cnt: 0,
+            max_invalid: max_invalid
         }
     }
     fn read_into_buf(&mut self) -> io::Result<usize> {
@@ -467,9 +478,17 @@ impl Iterator for TrigramIter {
             let b2 = self.current_value & 0xff;
             if b1 == 0x00 || b2 == 0x00 {
                 // Binary file. Skip
-                // TODO: log when a binary file causes a skip
                 Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
                                          "Binary data found in file")))
+            } else if !valid_utf8(b1 as u8, b2 as u8) {
+                // invalid utf8 data
+                self.inv_cnt += 1;
+                if self.inv_cnt > self.max_invalid {
+                    Some(Err(IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
+                                             "Too many invalid utf-8 sequences")))
+                } else {
+                    return self.next();
+                }
             } else {
                 Some(Ok(self.current_value))
             }
@@ -597,6 +616,21 @@ impl PostHeap {
             self.ch.swap(i, j);
             i = j;
         }
+    }
+}
+
+fn valid_utf8(c1: u8, c2: u8) -> bool {
+    if c1 < 0x80 {
+        // 1-byte, must be followed by 1-byte or first of multi-byte
+        (c2 < 0x80) || (0xc0 <= c2) && (c2 < 0xf8)
+    } else if c1 < 0xc0 {
+        // continuation byte, can be followed by nearly anything
+        (c2 < 0xf8)
+    } else if c1 < 0xf8 {
+        // first of multi-byte, must be followed by continuation byte
+        (0x80 <= c2) && (c2 < 0xc0)
+    } else {
+        false
     }
 }
 

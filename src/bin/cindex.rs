@@ -164,7 +164,7 @@ With no path arguments, cindex -reset removes the index.")
 
     let mut paths: Vec<PathBuf> = args.iter()
         .filter(|f| !f.is_empty())
-        .map(|f| env::current_dir().unwrap().join(f))
+        .map(|f| env::current_dir().unwrap().join(f).canonicalize().unwrap())
         .collect();
     paths.sort();
 
@@ -176,9 +176,11 @@ With no path arguments, cindex -reset removes the index.")
     }
     let (tx, rx) = mpsc::channel::<Option<OsString>>();
     let ip = index_path.clone();
+    let i_paths = paths.clone();
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
         let mut i = index::write::IndexWriter::new(ip);
+        i.add_paths(i_paths.into_iter().map(PathBuf::into_os_string).collect());
         while let Ok(Some(f)) = rx.recv() {
             // println!("f = {:?}", f);
             if !seen.contains(&f) {
@@ -190,6 +192,10 @@ With no path arguments, cindex -reset removes the index.")
                         // TODO: log this later
                         ()
                     },
+                    Err(ref e) if e.kind() == IndexErrorKind::HighInvalidUtf8Ratio => {
+                        // TODO: log this later
+                        ()
+                    }
                     Err(e) => {
                         writeln!(&mut io::stderr(), "err with file").unwrap();
                     }

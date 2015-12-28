@@ -52,78 +52,79 @@ pub struct IdRange {
 
 pub struct PostMapReader {
     index: Index,
+    id_map: Vec<IdRange>,
     tri_num: u32,
     trigram: u32,
+    count: u32,
     offset: u32,
-    id_map: Vec<IdRange>
+    d: Cursor<Vec<u8>>,
+    old_id: u32,
+    file_id: u32,
+    i: usize
 }
 
 impl PostMapReader {
     pub fn new(index: Index, id_map: Vec<IdRange>) -> PostMapReader {
-        PostMapReader {
+        let mut p = PostMapReader {
             index: index,
             id_map: id_map,
             tri_num: 0,
             trigram: u32::MAX,
-            offset: 0
-        }
+            count: 0,
+            offset: 0,
+            d: Cursor::new(Vec::new()),
+            old_id: u32::MAX,
+            file_id: 0,
+            i: 0
+        };
+        p.load();
+        p
     }
-    pub fn next_trigram(&mut self) -> Option<PostMapReaderSlice> {
+    pub fn next_trigram(&mut self) {
         self.tri_num += 1;
-        self.load()
+        self.load();
     }
-    fn load(&mut self) -> Option<PostMapReaderSlice> {
+    fn load(&mut self) {
+        // println!("tri_num = {}, num_post = {}", self.tri_num, self.index.num_post);
         if self.tri_num >= (self.index.num_post as u32) {
             self.trigram = u32::MAX;
-            return None;
+            self.count = 0;
+            self.file_id = u32::MAX;
+            return;
         }
         let (trigram, count, offset) = self.index.list_at((self.tri_num as usize) * POST_ENTRY_SIZE);
         self.trigram = trigram;
+        self.count = count;
         self.offset = offset;
         if count == 0 {
-            return None;
+            self.file_id = u32::MAX;
+            return;
         }
-        let view = unsafe {
+        self.d = unsafe {
             let s = self.index.as_slice();
             let split_point = self.index.post_data + self.offset + 3;
             let (_, right_side) = s.split_at(split_point as usize);
             Cursor::new(right_side.iter().cloned().collect::<Vec<_>>())
         };
-        Some(PostMapReaderSlice {
-            file_id: 0,
-            count: count,
-            d: view,
-            old_id: u32::MAX,
-            i: 0
-        })
+        self.old_id = u32::MAX;
+        self.i = 0;
     }
-}
-
-pub struct PostMapReaderSlice {
-    file_id: u32,
-    count: u32,
-    d: Cursor<Vec<u8>>,
-    old_id: u32,
-    i: usize
-}
-
-impl PostMapReaderSlice {
-    pub fn next_id(&mut self, id_map: &Vec<IdRange>) -> bool {
+    pub fn next_id(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
             let delta = self.d.read_unsigned_varint_32().unwrap();
-            self.old_id += delta;
-            while self.i < id_map.len() && id_map[self.i].high <= self.old_id {
+            self.old_id = self.old_id.wrapping_add(delta);
+            while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {
                 self.i += 1;
             }
-            if self.i >= id_map.len() {
+            if self.i >= self.id_map.len() {
                 self.count = 0;
                 break;
             }
-            if self.old_id < id_map[self.i].low {
+            if self.old_id < self.id_map[self.i].low {
                 continue;
             }
-            self.file_id = id_map[self.i].new + self.old_id - id_map[self.i].low;
+            self.file_id = self.id_map[self.i].new + self.old_id - self.id_map[self.i].low;
             return true;
         }
         self.file_id = u32::MAX;
@@ -166,7 +167,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
             IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
         }
         let mut v = Cursor::new(Vec::<u8>::new());
-        v.write_unsigned_varint_32(id - self.last).unwrap();
+        v.write_unsigned_varint_32(id.wrapping_sub(self.last)).unwrap();
         self.out.write(v.into_inner().deref()).unwrap();
         self.last = id;
         self.count += 1;
@@ -201,8 +202,14 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             i1 += 1;
         }
         let mut lo = i1;
-        let limit = path.clone();
-        while (i1 as usize) < ix1.num_name && ix1.name(i1 as u32) <= limit {
+        let limit = {
+            let (l1, l2) = path.split_at(path.len()-1);
+            assert!(l2.len() == 1);
+            let l2_u = l2.chars().next().unwrap() as u8;
+            l1.to_string() + &((l2_u + 1) as char).to_string()
+        };
+        println!("path = {}, limit = {}", path, limit);
+        while (i1 as usize) < ix1.num_name && ix1.name(i1 as u32) < limit {
             i1 += 1;
         }
 
@@ -305,51 +312,52 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     // Merged list of posting lists.
     let post_data = try!(get_offset(&mut ix3));
     let mut r1 = PostMapReader::new(ix1, map1);
-    let mut r1_slice = r1.load().expect("failed to get PostMapReaderSlice for r1");
     let mut r2 = PostMapReader::new(ix2, map2);
-    let mut r2_slice = r2.load().expect("failed to get PostMapReaderSlice for r2");
 
     let mut w = PostDataWriter::new(ix3);
 
+    let mut num_iters = 0;
     loop {
+        num_iters += 1;
         if r1.trigram < r2.trigram {
             w.trigram(r1.trigram);
-            while r1_slice.next_id(&r1.id_map) {
-                w.file_id(r1_slice.file_id);
+            while r1.next_id() {
+                w.file_id(r1.file_id);
             }
-            r1_slice = r1.next_trigram().expect("failed to get next PostMapReaderSlice for r1");
+            r1.next_trigram();
             w.end_trigram();
         } else if r2.trigram < r1.trigram {
             w.trigram(r2.trigram);
-            while r2_slice.next_id(&r2.id_map) {
-                w.file_id(r2_slice.file_id);
+            while r2.next_id() {
+                w.file_id(r2.file_id);
             }
-            r2_slice = r2.next_trigram().expect("failed to get next PostMapReaderSlice for r2");
+            r2.next_trigram();
             w.end_trigram();
         } else {
             if r1.trigram == u32::MAX {
                 break;
             }
             w.trigram(r1.trigram);
-            r1_slice.next_id(&r1.id_map);
-            r2_slice.next_id(&r2.id_map);
-            while r1_slice.file_id < u32::MAX || r2_slice.file_id < u32::MAX {
-                if r1_slice.file_id < r2_slice.file_id {
-                    w.file_id(r1_slice.file_id);
-                    r1_slice.next_id(&r1.id_map);
-                } else if r2_slice.file_id < r1_slice.file_id {
-                    w.file_id(r2_slice.file_id);
-                    r2_slice.next_id(&r2.id_map);
+            r1.next_id();
+            r2.next_id();
+            while r1.file_id < u32::MAX || r2.file_id < u32::MAX {
+                if r1.file_id < r2.file_id {
+                    w.file_id(r1.file_id);
+                    r1.next_id();
+                } else if r2.file_id < r1.file_id {
+                    w.file_id(r2.file_id);
+                    r2.next_id();
                 } else {
                     panic!("merge: inconsistent index");
                 }
             }
 
-            r1_slice = r1.next_trigram().expect("failed to get next PostMapReaderSlice for r1");
-            r2_slice = r2.next_trigram().expect("failed to get next PostMapReaderSlice for r2");
+            r1.next_trigram();
+            r2.next_trigram();
             w.end_trigram();
         }
     }
+    println!("num iters = {}", num_iters);
 
     let mut ix3 = w.out;
 
