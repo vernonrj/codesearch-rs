@@ -284,8 +284,6 @@ impl Index {
     }
 
     pub fn list_at(&self, offset: usize) -> (u32, u32, u32) {
-        let start = self.post_index + offset;
-        let end = start + POST_ENTRY_SIZE;
         let d: &[u8] = unsafe {
             let s = self.data.as_slice();
             let (_, right_side) = s.split_at(self.post_index + offset);

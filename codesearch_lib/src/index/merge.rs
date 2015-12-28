@@ -32,14 +32,14 @@
 // Rename C's index onto the new index.
 
 use index::read::{Index, POST_ENTRY_SIZE};
-use index::write::{get_offset, IndexWriter};
+use index::write::{get_offset, copy_file, IndexWriter};
 use index;
 
 use tempfile::TempFile;
 use byteorder::{BigEndian, WriteBytesExt};
 use varint::{VarintRead, VarintWrite};
 
-use std::io::{self, Write, Seek, BufWriter, Cursor};
+use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter, Cursor};
 use std::ops::Deref;
 use std::u32;
 use std::fs::File;
@@ -163,11 +163,11 @@ impl<W: Write + Seek> PostDataWriter<W> {
     }
     pub fn file_id(&mut self, id: u32) {
         if self.count == 0 {
-            IndexWriter::write_trigram(&mut self.out, self.t);
+            IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
         }
         let mut v = Cursor::new(Vec::<u8>::new());
-        v.write_unsigned_varint_32(id - self.last);
-        self.out.write(v.into_inner().deref());
+        v.write_unsigned_varint_32(id - self.last).unwrap();
+        self.out.write(v.into_inner().deref()).unwrap();
         self.last = id;
         self.count += 1;
     }
@@ -176,11 +176,11 @@ impl<W: Write + Seek> PostDataWriter<W> {
             return;
         }
         let mut v = Cursor::new(Vec::<u8>::new());
-        v.write_unsigned_varint_32(0);
-        self.out.write(v.into_inner().deref());
-        IndexWriter::write_trigram(&mut self.out, self.t);
-        IndexWriter::write_u32(&mut self.out, self.count);
-        IndexWriter::write_u32(&mut self.out, self.offset - self.base);
+        v.write_unsigned_varint_32(0).unwrap();
+        self.out.write(v.into_inner().deref()).unwrap();
+        IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
+        IndexWriter::write_u32(&mut self.out, self.count).unwrap();
+        IndexWriter::write_u32(&mut self.out, self.offset - self.base).unwrap();
     }
 }
 
@@ -205,7 +205,6 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         while (i1 as usize) < ix1.num_name && ix1.name(i1 as u32) <= limit {
             i1 += 1;
         }
-        let mut hi = i1;
 
         // Record range before the shadow
         if old < lo {
@@ -223,7 +222,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         while (i2 as usize) < ix2.num_name && ix2.name(i2) < limit {
             i2 += 1;
         }
-        hi = i2;
+        let hi = i2;
         if lo < hi {
             map2.push(IdRange { low: lo, high: hi, new: new });
             new += hi - lo;
@@ -235,10 +234,10 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         new += (ix1.num_name as u32) - i1;
     }
     if (i2 as usize) < ix2.num_name {
-        panic!("merge: inconsistent index");
+        panic!("merge: inconsistent index ({} < {})", i2, ix2.num_name);
     }
     let num_name = new;
-    let mut ix3 = BufWriter::new(try!(TempFile::new()));
+    let mut ix3 = BufWriter::new(try!(File::create(dest)));
     IndexWriter::write_string(&mut ix3, index::MAGIC).unwrap();
 
     let path_data = try!(get_offset(&mut ix3));
@@ -351,6 +350,23 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             w.end_trigram();
         }
     }
+
+    let mut ix3 = w.out;
+
+    // Name index
+    let name_index = get_offset(&mut ix3).unwrap();
+    name_index_file.seek(SeekFrom::Start(0)).unwrap();
+    copy_file(&mut ix3, &mut BufReader::new(name_index_file.into_inner().unwrap()));
+
+    // Posting list index
+    let post_index = get_offset(&mut ix3).unwrap();
+    copy_file(&mut ix3, &mut BufReader::new(w.post_index_file.into_inner().unwrap()));
     
-    unimplemented!();
+    IndexWriter::write_u32(&mut ix3, path_data as u32).unwrap();
+    IndexWriter::write_u32(&mut ix3, name_data as u32).unwrap();
+    IndexWriter::write_u32(&mut ix3, post_data as u32).unwrap();
+    IndexWriter::write_u32(&mut ix3, name_index as u32).unwrap();
+    IndexWriter::write_u32(&mut ix3, post_index as u32).unwrap();
+    IndexWriter::write_string(&mut ix3, index::TRAILER_MAGIC).unwrap();
+    Ok(())
 }

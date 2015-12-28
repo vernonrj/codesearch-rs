@@ -13,9 +13,9 @@ use codesearch_lib::index::write::{IndexError, IndexErrorKind, IndexResult};
 
 use std::collections::HashSet;
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::{self, DirEntry, File};
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, Write, BufRead, BufReader};
 use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::sync::mpsc;
@@ -110,10 +110,10 @@ With no path arguments, cindex -reset removes the index.")
     .get_matches();
 
     let mut excludes: Vec<String> = vec![".csearchindex".to_string()];
-    let mut paths = Vec::<String>::new();
+    let mut args = Vec::<String>::new();
 
     if let Some(p) = matches.value_of("path") {
-        paths.push(p.to_string());
+        args.push(p.to_string());
     }
     
     matches.value_of("INDEX_FILE").map(|p| {
@@ -151,18 +151,21 @@ With no path arguments, cindex -reset removes the index.")
     if let Some(file_list_str) = matches.value_of("FILE") {
         let file_list = Path::new(file_list_str);
         let f = BufReader::new(File::open(file_list).expect("filelist file open error"));
-        paths.extend(f.lines().map(|f| f.unwrap().trim().to_string()));
+        args.extend(f.lines().map(|f| f.unwrap().trim().to_string()));
     }
 
-    if paths.is_empty() {
+    if args.is_empty() {
         let index_path = index::csearch_index();
         let i = index::read::Index::open(index_path).expect("failed to open Index");
         for each_file in i.indexed_paths() {
-            paths.push(each_file);
+            args.push(each_file);
         }
     }
 
-    paths = paths.iter().filter(|f| !f.is_empty()).cloned().collect();
+    let mut paths: Vec<PathBuf> = args.iter()
+        .filter(|f| !f.is_empty())
+        .map(|f| env::current_dir().unwrap().join(f))
+        .collect();
     paths.sort();
 
     let mut needs_merge = false;
@@ -183,14 +186,22 @@ With no path arguments, cindex -reset removes the index.")
                 match i.add_file(f) {
                     Ok(_) => (),
                     Err(ref e) if e.kind() == IndexErrorKind::IoError => panic!("IOError"),
-                    Err(_) => ()
+                    Err(ref e) if e.kind() == IndexErrorKind::BinaryDataPresent => {
+                        // TODO: log this later
+                        ()
+                    },
+                    Err(e) => {
+                        writeln!(&mut io::stderr(), "err with file").unwrap();
+                    }
                 }
             }
         }
-        i
+        println!("flush index");
+        i.flush().unwrap();
     });
 
     for p in paths {
+        println!("index {}", p.display());
         let tx = tx.clone();
         walk_dir(Path::new(&p), &move |d: &DirEntry| {
             tx.send(Some(d.path().into_os_string())).unwrap();
@@ -199,9 +210,15 @@ With no path arguments, cindex -reset removes the index.")
     tx.send(None).unwrap();
     h.join().unwrap();
     if needs_merge {
-        index::merge::merge(index_path.clone() + &"~", index::csearch_index(), index_path.clone());
-        fs::remove_file(index_path.clone());
-        fs::remove_file(index::csearch_index());
-        fs::rename(index_path + &"~", index::csearch_index());
+        let dest_path = index_path.clone() + &"~";
+        let src1_path = index::csearch_index();
+        let src2_path = index_path.clone();
+        println!("merge {} {}", src1_path, src2_path);
+        index::merge::merge(dest_path, src1_path, src2_path).unwrap();
+        fs::remove_file(index_path.clone()).unwrap();
+        fs::remove_file(index::csearch_index()).unwrap();
+        fs::rename(index_path + &"~", index::csearch_index()).unwrap();
     }
+
+    println!("done");
 }
