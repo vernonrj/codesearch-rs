@@ -77,7 +77,7 @@ use index::regexp::{Query, QueryOperation};
 use index::search;
 
 static TRAILER_MAGIC: &'static str = "\ncsearch trailr\n";
-const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
+pub const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
 
 /// Simple alias for an ID representing a filename in the Index.
 pub type FileID = u32;
@@ -111,7 +111,7 @@ pub struct Index {
     data: Mmap,
     path_data: u32,
     name_data: u32,
-    post_data: u32,
+    pub post_data: u32,
     name_index: usize,
     post_index: usize,
     pub num_name: usize,
@@ -257,7 +257,7 @@ impl Index {
     }
 
     /// Returns the index as a slice
-    unsafe fn as_slice(&self) -> &[u8] {
+    pub unsafe fn as_slice(&self) -> &[u8] {
         self.data.as_slice()
     }
 
@@ -281,6 +281,29 @@ impl Index {
         let file_id_usize = file_id as usize;
         let offset = self.extract_data(self.name_index + 4 * file_id_usize);
         self.extract_string_at((self.name_data + offset) as usize)
+    }
+
+    pub fn list_at(&self, offset: usize) -> (u32, u32, u32) {
+        let start = self.post_index + offset;
+        let end = start + POST_ENTRY_SIZE;
+        let d: &[u8] = unsafe {
+            let s = self.data.as_slice();
+            let (_, right_side) = s.split_at(self.post_index + offset);
+            let (d, _) = right_side.split_at(POST_ENTRY_SIZE);
+            d
+        };
+        let tri_val = (d[0] as u32) << 16
+                    | (d[1] as u32) << 8
+                    | (d[2] as u32);
+        let count = {
+            let (_, mut right) = d.split_at(3);
+            right.read_u32::<BigEndian>().unwrap()
+        };
+        let offset = {
+            let (_, mut right) = d.split_at(3+4);
+            right.read_u32::<BigEndian>().unwrap()
+        };
+        (tri_val, count, offset)
     }
 
     /// Extract a null-terminated string from `offset`

@@ -14,6 +14,7 @@ use std::fmt;
 
 use tempfile::TempFile;
 use byteorder::{BigEndian, WriteBytesExt};
+use varint::VarintRead;
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -193,6 +194,19 @@ impl IndexWriter {
     }
     pub fn write_string<W: Write>(writer: &mut BufWriter<W>, s: &str) -> io::Result<usize> {
         writer.write(s.as_bytes())
+    }
+    pub fn write_trigram<W: Write>(writer: &mut BufWriter<W>, t: u32) -> io::Result<usize> {
+        let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
+                                ((t >> 8) & 0xff) as u8,
+                                (t & 0xff) as u8];
+        writer.write(&mut buf)
+    }
+    pub fn write_u32<W: Write>(writer: &mut BufWriter<W>, u: u32) -> io::Result<usize> {
+        let mut buf: [u8; 4] = [((u >> 24) & 0xff) as u8,
+                                ((u >> 16) & 0xff) as u8,
+                                ((u >> 8) & 0xff) as u8,
+                                (u & 0xff) as u8];
+        writer.write(&mut buf)
     }
 }
 
