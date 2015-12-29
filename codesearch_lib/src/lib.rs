@@ -1,4 +1,6 @@
 extern crate byteorder;
+#[macro_use]
+extern crate log;
 extern crate memmap;
 extern crate num;
 extern crate regex;

@@ -7,5 +7,8 @@ authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 clap = "1.5.4"
 regex = "0.1.44"
 regex-syntax = "0.2.2"
+log = "0.3.4"
 
 codesearch_lib = { path = "codesearch_lib" }
+
+

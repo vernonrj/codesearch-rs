@@ -5,11 +5,13 @@
 
 #[macro_use]
 extern crate clap;
+extern crate log;
 
 extern crate codesearch_lib;
 
+
 use codesearch_lib::index;
-use codesearch_lib::index::write::{IndexError, IndexErrorKind, IndexResult};
+use codesearch_lib::index::write::IndexErrorKind;
 
 use std::collections::HashSet;
 use std::env;
@@ -174,15 +176,16 @@ With no path arguments, cindex -reset removes the index.")
         needs_merge = true;
         index_path.push('~');
     }
+
     let (tx, rx) = mpsc::channel::<Option<OsString>>();
-    let ip = index_path.clone();
-    let i_paths = paths.clone();
+    // copying these variables into the worker thread
+    let index_path_cloned = index_path.clone();
+    let paths_cloned = paths.clone();
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
-        let mut i = index::write::IndexWriter::new(ip);
-        i.add_paths(i_paths.into_iter().map(PathBuf::into_os_string).collect());
+        let mut i = index::write::IndexWriter::new(index_path_cloned);
+        i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
         while let Ok(Some(f)) = rx.recv() {
-            // println!("f = {:?}", f);
             if !seen.contains(&f) {
                 seen.insert(f.clone());
                 match i.add_file(f) {
@@ -197,7 +200,7 @@ With no path arguments, cindex -reset removes the index.")
                         ()
                     }
                     Err(e) => {
-                        writeln!(&mut io::stderr(), "err with file").unwrap();
+                        writeln!(&mut io::stderr(), "err with file: {}", e).unwrap();
                     }
                 }
             }

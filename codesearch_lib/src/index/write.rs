@@ -13,6 +13,7 @@ use std::error;
 use std::fmt;
 use std::ops::Deref;
 use std::u32;
+use std::mem;
 
 use tempfile::{TempFile, NamedTempFile};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -169,8 +170,8 @@ impl IndexWriter {
         }
         self.bytes_written += size as usize;
 
-        let file_id = try!(self.add_name(filename.clone()));
-        for each_trigram in trigram.clone() {
+        let file_id = try!(self.add_name(filename));
+        for each_trigram in trigram {
             if self.post.len() >= NPOST {
                 try!(self.flush_post());
             }
@@ -214,28 +215,27 @@ impl IndexWriter {
             Self::write_u32(&mut self.index, *v as u32).unwrap();
         }
         Self::write_string(&mut self.index, index::TRAILER_MAGIC).unwrap();
-        println!("{} data bytes, {} index bytes",
-                 self.bytes_written,
-                 get_offset(&mut self.index).unwrap());
+        info!("{} data bytes, {} index bytes",
+              self.bytes_written,
+              get_offset(&mut self.index).unwrap());
         Ok(())
     }
     fn merge_post(&mut self) -> io::Result<()> {
         let mut h = PostHeap::new();
-        println!("merge {} files + mem", self.post_files.len());
+        info!("merge {} files + mem", self.post_files.len());
 
         for f in &self.post_files {
             h.add_file(f.deref()).unwrap();
         }
         self.post.sort();
-        // TODO: maybe move out of self.post?
-        h.add_mem(self.post.clone());
+        let mut v = Vec::new();
+        mem::swap(&mut v, &mut self.post);
+        h.add_mem(v);
 
-        let mut npost = 0;
         let mut e = h.next();
         let offset0 = get_offset(&mut self.index).unwrap();
 
         loop {
-            npost += 1;
             let offset = get_offset(&mut self.index).unwrap() - offset0;
             let trigram = e.trigram();
             self.buf[0] = ((trigram >> 16) & 0xff) as u8;
@@ -715,6 +715,5 @@ pub fn test_trigram_iter() {
     let llo =   ('l' as u32) << 16
               | ('l' as u32) << 8
               | ('o' as u32);
-    println!("{:?} == {:?}", trigrams, vec![hel, ell, llo]);
     assert!(trigrams == vec![hel,ell,llo]);
 }
