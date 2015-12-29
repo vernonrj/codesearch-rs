@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
+chrono = "0.2"
 clap = "1.5.4"
 regex = "0.1.44"
 regex-syntax = "0.2.2"
@@ -12,3 +13,10 @@ log = "0.3.4"
 codesearch_lib = { path = "codesearch_lib" }
 
 
+[[bin]]
+name = "csearch"
+path = "src/csearch.rs"
+
+[[bin]]
+name = "cindex"
+path = "src/cindex.rs"

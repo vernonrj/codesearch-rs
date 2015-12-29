@@ -361,11 +361,11 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let post_index = get_offset(&mut ix3).unwrap();
     copy_file(&mut ix3, &mut BufReader::new(w.post_index_file.into_inner().unwrap()));
     
-    info!("path_data  = {}", path_data );
-    info!("name_data  = {}", name_data );
-    info!("post_data  = {}", post_data );
-    info!("name_index = {}", name_index); 
-    info!("post_index = {}", post_index); 
+    trace!("path_data  = {}", path_data );
+    trace!("name_data  = {}", name_data );
+    trace!("post_data  = {}", post_data );
+    trace!("name_index = {}", name_index); 
+    trace!("post_index = {}", post_index); 
 
 
     IndexWriter::write_u32(&mut ix3, path_data as u32).unwrap();

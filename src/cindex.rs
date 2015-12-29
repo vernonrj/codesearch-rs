@@ -3,12 +3,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+extern crate chrono;
 #[macro_use]
 extern crate clap;
+#[macro_use]
 extern crate log;
 
 extern crate codesearch_lib;
 
+mod customlogger;
 
 use codesearch_lib::index;
 use codesearch_lib::index::write::IndexErrorKind;
@@ -38,6 +41,7 @@ fn walk_dir(dir: &Path, cb: &Fn(&DirEntry)) -> io::Result<()> {
 }
 
 fn main() {
+    customlogger::init().unwrap();
     let matches = clap::App::new("cindex")
         .version(&crate_version!()[..])
         .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
@@ -205,12 +209,12 @@ With no path arguments, cindex -reset removes the index.")
                 }
             }
         }
-        println!("flush index");
+        info!("flush index");
         i.flush().unwrap();
     });
 
     for p in paths {
-        println!("index {}", p.display());
+        info!("index {}", p.display());
         let tx = tx.clone();
         walk_dir(Path::new(&p), &move |d: &DirEntry| {
             tx.send(Some(d.path().into_os_string())).unwrap();
@@ -222,12 +226,12 @@ With no path arguments, cindex -reset removes the index.")
         let dest_path = index_path.clone() + &"~";
         let src1_path = index::csearch_index();
         let src2_path = index_path.clone();
-        println!("merge {} {}", src1_path, src2_path);
+        info!("merge {} {}", src1_path, src2_path);
         index::merge::merge(dest_path, src1_path, src2_path).unwrap();
         fs::remove_file(index_path.clone()).unwrap();
         fs::remove_file(index::csearch_index()).unwrap();
         fs::rename(index_path + &"~", index::csearch_index()).unwrap();
     }
 
-    println!("done");
+    info!("done");
 }

@@ -6,10 +6,14 @@
 
 #[macro_use]
 extern crate clap;
+extern crate chrono;
+extern crate log;
 extern crate regex;
 extern crate regex_syntax;
 
 extern crate codesearch_lib;
+
+mod customlogger;
 
 use codesearch_lib::index;
 use codesearch_lib::grep;
@@ -29,6 +33,8 @@ pub struct MatchOptions {
 }
 
 fn main() {
+    customlogger::init().unwrap();
+
     let matches = clap::App::new("csearch")
         .version(&crate_version!()[..])
         .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
