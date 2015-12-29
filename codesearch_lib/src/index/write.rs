@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 
 #![allow(dead_code)]
-use std::collections::HashSet;
+use std::collections::{HashSet, BinaryHeap};
 use std::fs::File;
 use std::io::{self, Cursor, Seek, SeekFrom, Read, BufRead, BufReader, BufWriter, Write};
 use std::io::{Error, ErrorKind};
@@ -221,18 +221,19 @@ impl IndexWriter {
         Ok(())
     }
     fn merge_post(&mut self) -> io::Result<()> {
-        let mut h = PostHeap::new();
+        let mut heap = PostHeap::new();
         info!("merge {} files + mem", self.post_files.len());
 
         for f in &self.post_files {
-            h.add_file(f.deref()).unwrap();
+            heap.add_file(f.deref()).unwrap();
         }
         self.post.sort();
         let mut v = Vec::new();
         mem::swap(&mut v, &mut self.post);
-        h.add_mem(v);
+        heap.add_mem(v);
 
-        let mut e = h.next();
+        let mut h = heap.into_vec().into_iter();
+        let mut e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
         let offset0 = get_offset(&mut self.index).unwrap();
 
         loop {
@@ -251,7 +252,7 @@ impl IndexWriter {
                 IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
                 file_id = e.file_id();
                 nfile += 1;
-                e = h.next();
+                e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
             }
             IndexWriter::write_uvarint(&mut self.index, 0).unwrap();
 
@@ -524,102 +525,30 @@ struct PostChunk {
 }
 
 struct PostHeap {
-    ch: Vec<PostChunk>
+    ch: BinaryHeap<PostEntry>
 }
 
 impl PostHeap {
     pub fn new() -> PostHeap {
         PostHeap {
-            ch: Vec::new()
+            ch: BinaryHeap::new()
         }
     }
     pub fn len(&self) -> usize { self.ch.len() }
     pub fn is_empty(&self) -> bool { self.ch.is_empty() }
-    pub fn next(&mut self) -> PostEntry {
-        if self.ch.is_empty() {
-            return PostEntry::new((1 << 24) - 1, 0);
-        }
-        let e = self.ch[0].e;
-        if self.ch[0].m.is_empty() {
-            self.pop();
-        } else {
-            self.ch[0].e = self.ch[0].m[0];
-            self.ch[0].m.remove(0);
-            self.sift_down(0);
-        }
-        return e;
+    pub fn into_vec(self) -> Vec<PostEntry> {
+        self.ch.into_sorted_vec()
     }
     pub fn add_file(&mut self, f: &File) -> io::Result<()> {
         let m = try!(Mmap::open(f, Protection::Read));
         let mut bytes = Cursor::new(unsafe { m.as_slice() });
-        let mut v = Vec::new();
         while let Ok(p) = bytes.read_u64::<BigEndian>() {
-            v.push(PostEntry(p));
+            self.ch.push(PostEntry(p));
         }
-        self.add_mem(v);
         Ok(())
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
-        self.add(PostChunk { e: PostEntry(0), m: v });
-    }
-    pub fn add(&mut self, ch: PostChunk) {
-        let mut ch = ch;
-        if ch.m.len() > 0 {
-            ch.e = ch.m[0];
-            ch.m.remove(0);
-            self.push(ch);
-        }
-    }
-    pub fn push(&mut self, ch: PostChunk) {
-        let n = self.ch.len();
-        self.ch.push(ch);
-        if self.ch.len() >= 2 {
-            self.sift_up(n);
-        }
-    }
-    pub fn pop(&mut self) -> Option<PostChunk> {
-        if self.is_empty() {
-            return None;
-        }
-        let ch = self.ch[0].clone();
-        let n = self.ch.len() - 1;
-        self.ch.swap(0, n);
-        self.ch.pop();
-        if n > 1 {
-            self.sift_down(0);
-        }
-        Some(ch)
-    }
-    pub fn sift_up(&mut self, mut j: usize) {
-        loop {
-            if j == 0 {
-                break;
-            }
-            let i = (j - 1) / 2;
-            if i == j || self.ch[i].e < self.ch[j].e {
-                break;
-            }
-            self.ch.swap(i, j);
-            j = i;
-        }
-    }
-    pub fn sift_down(&mut self, mut i: usize) {
-        loop {
-            let j1 = 2*i + 1;
-            if j1 >= self.ch.len() {
-                break;
-            }
-            let mut j = j1;
-            let j2 = j1 + 1;
-            if j2 < self.ch.len() && self.ch[j1].e >= self.ch[j2].e {
-                j = j2;
-            }
-            if self.ch[i].e < self.ch[j].e {
-                break;
-            }
-            self.ch.swap(i, j);
-            i = j;
-        }
+        self.ch.extend(v.into_iter());
     }
 }
 
