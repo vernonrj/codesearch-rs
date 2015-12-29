@@ -29,7 +29,7 @@ pub fn read_uvarint(b: &[u8]) -> Result<(u64, u64), u64> {
             if i > 9 || i == 9 && *b > 1 {
                 return Err((i+1) as u64);
             } else {
-                return Ok((x | (*b as u64) << s, ((i + 1) as u64)));
+                return Ok((x | ((*b as u64) << s), ((i + 1) as u64)));
             }
         }
         x |= ((b & 0x7f) as u64) << s;

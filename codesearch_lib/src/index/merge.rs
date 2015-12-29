@@ -43,6 +43,7 @@ use std::ops::Deref;
 use std::u32;
 use std::fs::File;
 
+#[derive(Debug)]
 pub struct IdRange {
     low: u32,
     high: u32,
@@ -85,7 +86,6 @@ impl<'a> PostMapReader<'a> {
         self.load();
     }
     fn load(&mut self) {
-        // println!("tri_num = {}, num_post = {}", self.tri_num, self.index.num_post);
         if self.tri_num >= (self.index.num_post as u32) {
             self.trigram = u32::MAX;
             self.count = 0;
@@ -105,7 +105,6 @@ impl<'a> PostMapReader<'a> {
             let split_point = self.index.post_data + self.offset + 3;
             let (_, right_side) = s.split_at(split_point as usize);
             right_side
-            // Cursor::new(right_side.iter().cloned().collect::<Vec<_>>())
         };
         self.old_id = u32::MAX;
         self.i = 0;
@@ -114,8 +113,7 @@ impl<'a> PostMapReader<'a> {
         while self.count > 0 {
             self.count -= 1;
             let (delta, n) = index::read_uvarint(self.d).unwrap();
-            let (_, right_side) = self.d.split_at(n as usize);
-            self.d = right_side;
+            self.d = self.d.split_at(n as usize).1;
             self.old_id = self.old_id.wrapping_add(delta as u32);
             while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {
                 self.i += 1;
@@ -148,11 +146,11 @@ struct PostDataWriter<W: Write + Seek> {
 impl<W: Write + Seek> PostDataWriter<W> {
     pub fn new(out: BufWriter<W>) -> PostDataWriter<W> {
         let mut out = out;
-        let offset = get_offset(&mut out).unwrap() as u32;
+        let base = get_offset(&mut out).unwrap() as u32;
         PostDataWriter {
             out: out,
             post_index_file: BufWriter::new(TempFile::new().unwrap()),
-            base: offset,
+            base: base,
             count: 0,
             offset: 0,
             last: 0,
@@ -178,9 +176,9 @@ impl<W: Write + Seek> PostDataWriter<W> {
             return;
         }
         IndexWriter::write_uvarint(&mut self.out, 0).unwrap();
-        IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
-        IndexWriter::write_u32(&mut self.out, self.count).unwrap();
-        IndexWriter::write_u32(&mut self.out, self.offset - self.base).unwrap();
+        IndexWriter::write_trigram(&mut self.post_index_file, self.t).unwrap();
+        IndexWriter::write_u32(&mut self.post_index_file, self.count).unwrap();
+        IndexWriter::write_u32(&mut self.post_index_file, self.offset - self.base).unwrap();
     }
 }
 
@@ -347,7 +345,6 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
                     panic!("merge: inconsistent index");
                 }
             }
-
             r1.next_trigram();
             r2.next_trigram();
             w.end_trigram();
@@ -357,7 +354,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let mut ix3 = w.out;
 
     // Name index
-    let name_index = get_offset(&mut ix3).unwrap();
+    let name_index = try!(get_offset(&mut ix3));
     name_index_file.seek(SeekFrom::Start(0)).unwrap();
     copy_file(&mut ix3, &mut BufReader::new(name_index_file.into_inner().unwrap()));
 

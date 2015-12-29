@@ -169,9 +169,8 @@ impl IndexWriter {
         }
         self.bytes_written += size as usize;
 
-        let file_id = try!(self.add_name(filename));
-        // println!("len = {}, cap = {}", self.post.len(), NPOST);
-        for each_trigram in trigram {
+        let file_id = try!(self.add_name(filename.clone()));
+        for each_trigram in trigram.clone() {
             if self.post.len() >= NPOST {
                 try!(self.flush_post());
             }
@@ -245,19 +244,10 @@ impl IndexWriter {
 
             // posting list
             let mut file_id = u32::MAX;
-            let mut nfile = 0;
+            let mut nfile: u32 = 0;
             self.index.write(&mut self.buf[..3]).unwrap();
-            while e.trigram() == trigram && trigram != (1<<24)-1 {
-                let fdiff = {
-                    // need to sorta overflow gracefully
-                    let fid1 = e.file_id();
-                    let fid2 = file_id;
-                    if fid1 >= fid2 {
-                        fid1 - fid2
-                    } else { 
-                        fid1 + 1
-                    }
-                };
+            while e.trigram() == trigram && (trigram != (1<<24)-1) {
+                let fdiff = e.file_id().wrapping_sub(file_id);
                 IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
                 file_id = e.file_id();
                 nfile += 1;
