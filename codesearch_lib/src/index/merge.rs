@@ -37,7 +37,6 @@ use index;
 
 use tempfile::TempFile;
 use byteorder::{BigEndian, WriteBytesExt};
-use varint::{VarintRead, VarintWrite};
 
 use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter, Cursor};
 use std::ops::Deref;
@@ -50,21 +49,22 @@ pub struct IdRange {
     new: u32
 }
 
-pub struct PostMapReader {
-    index: Index,
+pub struct PostMapReader<'a> {
+    index: &'a Index,
     id_map: Vec<IdRange>,
     tri_num: u32,
     trigram: u32,
     count: u32,
     offset: u32,
-    d: Cursor<Vec<u8>>,
+    d: &'a [u8],
     old_id: u32,
     file_id: u32,
     i: usize
 }
 
-impl PostMapReader {
-    pub fn new(index: Index, id_map: Vec<IdRange>) -> PostMapReader {
+impl<'a> PostMapReader<'a> {
+    pub fn new(index: &'a Index, id_map: Vec<IdRange>) -> PostMapReader<'a> {
+        let s = unsafe { index.as_slice() };
         let mut p = PostMapReader {
             index: index,
             id_map: id_map,
@@ -72,7 +72,7 @@ impl PostMapReader {
             trigram: u32::MAX,
             count: 0,
             offset: 0,
-            d: Cursor::new(Vec::new()),
+            d: s,
             old_id: u32::MAX,
             file_id: 0,
             i: 0
@@ -104,7 +104,8 @@ impl PostMapReader {
             let s = self.index.as_slice();
             let split_point = self.index.post_data + self.offset + 3;
             let (_, right_side) = s.split_at(split_point as usize);
-            Cursor::new(right_side.iter().cloned().collect::<Vec<_>>())
+            right_side
+            // Cursor::new(right_side.iter().cloned().collect::<Vec<_>>())
         };
         self.old_id = u32::MAX;
         self.i = 0;
@@ -112,8 +113,10 @@ impl PostMapReader {
     pub fn next_id(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let delta = self.d.read_unsigned_varint_32().unwrap();
-            self.old_id = self.old_id.wrapping_add(delta);
+            let (delta, n) = index::read_uvarint(self.d).unwrap();
+            let (_, right_side) = self.d.split_at(n as usize);
+            self.d = right_side;
+            self.old_id = self.old_id.wrapping_add(delta as u32);
             while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {
                 self.i += 1;
             }
@@ -166,9 +169,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
         }
-        let mut v = Cursor::new(Vec::<u8>::new());
-        v.write_unsigned_varint_32(id.wrapping_sub(self.last)).unwrap();
-        self.out.write(v.into_inner().deref()).unwrap();
+        IndexWriter::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
         self.count += 1;
     }
@@ -176,9 +177,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             return;
         }
-        let mut v = Cursor::new(Vec::<u8>::new());
-        v.write_unsigned_varint_32(0).unwrap();
-        self.out.write(v.into_inner().deref()).unwrap();
+        IndexWriter::write_uvarint(&mut self.out, 0).unwrap();
         IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
         IndexWriter::write_u32(&mut self.out, self.count).unwrap();
         IndexWriter::write_u32(&mut self.out, self.offset - self.base).unwrap();
@@ -208,7 +207,6 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             let l2_u = l2.chars().next().unwrap() as u8;
             l1.to_string() + &((l2_u + 1) as char).to_string()
         };
-        println!("path = {}, limit = {}", path, limit);
         while (i1 as usize) < ix1.num_name && ix1.name(i1 as u32) < limit {
             i1 += 1;
         }
@@ -311,14 +309,12 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
 
     // Merged list of posting lists.
     let post_data = try!(get_offset(&mut ix3));
-    let mut r1 = PostMapReader::new(ix1, map1);
-    let mut r2 = PostMapReader::new(ix2, map2);
+    let mut r1 = PostMapReader::new(&ix1, map1);
+    let mut r2 = PostMapReader::new(&ix2, map2);
 
     let mut w = PostDataWriter::new(ix3);
 
-    let mut num_iters = 0;
     loop {
-        num_iters += 1;
         if r1.trigram < r2.trigram {
             w.trigram(r1.trigram);
             while r1.next_id() {
@@ -357,7 +353,6 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             w.end_trigram();
         }
     }
-    println!("num iters = {}", num_iters);
 
     let mut ix3 = w.out;
 
@@ -370,6 +365,13 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let post_index = get_offset(&mut ix3).unwrap();
     copy_file(&mut ix3, &mut BufReader::new(w.post_index_file.into_inner().unwrap()));
     
+    println!("path_data  = {}", path_data );
+    println!("name_data  = {}", name_data );
+    println!("post_data  = {}", post_data );
+    println!("name_index = {}", name_index); 
+    println!("post_index = {}", post_index); 
+
+
     IndexWriter::write_u32(&mut ix3, path_data as u32).unwrap();
     IndexWriter::write_u32(&mut ix3, name_data as u32).unwrap();
     IndexWriter::write_u32(&mut ix3, post_data as u32).unwrap();

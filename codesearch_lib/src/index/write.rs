@@ -17,7 +17,6 @@ use std::u32;
 use tempfile::{TempFile, NamedTempFile};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use memmap::{Mmap, Protection};
-use varint::VarintWrite;
 
 use index;
 
@@ -163,10 +162,6 @@ impl IndexWriter {
         for each_trigram in TrigramIter::from_file(f, max_utf8_invalid) {
             trigram.insert(try!(each_trigram));
         }
-        println!("indexing file {:?}, num trigrams = {}, size = {}",
-                filename,
-                trigram.len(),
-                size);
         // TODO: add invalid trigram count checking
         if trigram.len() > MAX_TEXT_TRIGRAMS {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
@@ -253,7 +248,6 @@ impl IndexWriter {
             let mut nfile = 0;
             self.index.write(&mut self.buf[..3]).unwrap();
             while e.trigram() == trigram && trigram != (1<<24)-1 {
-                let mut v = Cursor::new(Vec::<u8>::new());
                 let fdiff = {
                     // need to sorta overflow gracefully
                     let fid1 = e.file_id();
@@ -264,15 +258,12 @@ impl IndexWriter {
                         fid1 + 1
                     }
                 };
-                v.write_unsigned_varint_32(fdiff).unwrap();
-                self.index.write(v.into_inner().deref()).unwrap();
+                IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
                 file_id = e.file_id();
                 nfile += 1;
                 e = h.next();
             }
-            let mut v = Cursor::new(Vec::<u8>::new());
-            v.write_unsigned_varint_32(0).unwrap();
-            self.index.write(v.into_inner().deref()).unwrap();
+            IndexWriter::write_uvarint(&mut self.index, 0).unwrap();
 
             self.post_index.write(&mut self.buf[..3]).unwrap();
             Self::write_u32(&mut self.post_index, nfile).unwrap();
@@ -310,6 +301,29 @@ impl IndexWriter {
                                 ((u >> 8) & 0xff) as u8,
                                 (u & 0xff) as u8];
         writer.write(&mut buf)
+    }
+    pub fn write_uvarint<W: Write>(writer: &mut W, x: u32) -> io::Result<usize> {
+        if x < (1<<7) {
+            writer.write(&mut [x as u8])
+        } else if x < (1<<14) {
+            writer.write(&mut [((x | 0x80) & 0xff) as u8,
+                               ((x >> 7) & 0xff) as u8])
+        } else if x < (1<<21) {
+            writer.write(&mut [((x | 0x80) & 0xff) as u8,
+                               ((x >> 7) & 0xff) as u8,
+                               ((x >> 14) & 0xff) as u8])
+        } else if x < (1<<28) {
+            writer.write(&mut [((x | 0x80) & 0xff) as u8,
+                               ((x >> 7) & 0xff) as u8,
+                               ((x >> 14) & 0xff) as u8,
+                               ((x >> 21) & 0xff) as u8])
+        } else {
+            writer.write(&mut [((x | 0x80) & 0xff) as u8,
+                               ((x >> 7) & 0xff) as u8,
+                               ((x >> 14) & 0xff) as u8,
+                               ((x >> 21) & 0xff) as u8,
+                               ((x >> 21) & 0xff) as u8])
+        }
     }
 }
 
