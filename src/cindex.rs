@@ -19,8 +19,9 @@ use codesearch_lib::index::write::IndexErrorKind;
 use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::fs::{self, DirEntry, File};
+use std::fs::{self, DirEntry, File, FileType};
 use std::io::{self, Write, BufRead, BufReader};
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::sync::mpsc;
@@ -38,6 +39,18 @@ fn walk_dir(dir: &Path, cb: &Fn(&DirEntry)) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn is_regular_file(meta: FileType) -> bool {
+    !meta.is_dir()
+}
+
+#[cfg(not(windows))]
+fn is_regular_file(meta: FileType) -> bool {
+    !meta.is_dir() && !meta.is_symlink()
+        && !meta.is_fifo() && !meta.is_socket()
+        && !meta.is_block_device() && !meta.is_char_device()
 }
 
 fn main() {
@@ -143,10 +156,8 @@ With no path arguments, cindex -reset removes the index.")
             return;
         }
         let meta = p.metadata().expect("failed to get metadata for file!").file_type();
-        if !meta.is_dir() && !meta.is_symlink()
-            && !meta.is_fifo() && !meta.is_socket()
-            && !meta.is_block_device() && !meta.is_char_device() {
-                std::fs::remove_file(p).expect("failed to remove file");
+        if is_regular_file(meta) {
+            std::fs::remove_file(p).expect("failed to remove file");
         }
     }
     if let Some(exc_path_str) = matches.value_of("EXCLUDE_FILE") {
