@@ -164,8 +164,7 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        let it = TrigramIter::from_file(f, max_utf8_invalid);
-        for each_trigram in it.take(MAX_TEXT_TRIGRAMS + 2) {
+        for each_trigram in TrigramIter::from_file(f, max_utf8_invalid) {
             self.trigram.insert(try!(each_trigram));
         }
         // TODO: add invalid trigram count checking
