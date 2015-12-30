@@ -41,12 +41,12 @@ fn walk_dir(dir: &Path, cb: &Fn(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(windows)]
+#[cfg(not(unix))]
 fn is_regular_file(meta: FileType) -> bool {
     !meta.is_dir()
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn is_regular_file(meta: FileType) -> bool {
     !meta.is_dir() && !meta.is_symlink()
         && !meta.is_fifo() && !meta.is_socket()
