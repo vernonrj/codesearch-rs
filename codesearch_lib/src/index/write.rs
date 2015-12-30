@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 
 #![allow(dead_code)]
-use std::collections::{HashSet, BinaryHeap};
+use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{self, Cursor, Seek, SeekFrom, Read, BufRead, BufReader, BufWriter, Write};
 use std::io::{Error, ErrorKind};
@@ -20,6 +20,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use memmap::{Mmap, Protection};
 
 use index;
+use index::sparseset::SparseSet;
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -110,6 +111,8 @@ pub struct IndexWriter {
     name_data: TempFile,
     name_index: TempFile,
 
+    trigram: SparseSet,
+
     pub number_of_names_written: usize,
     pub bytes_written: usize,
 
@@ -135,6 +138,7 @@ impl IndexWriter {
             paths: Vec::new(),
             name_data: TempFile::new().expect("failed to make tempfile"),
             name_index: TempFile::new().expect("failed to make tempfile"),
+            trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
             post: Vec::new(),
@@ -158,20 +162,23 @@ impl IndexWriter {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
                                        "file too long, ignoring"));
         }
-        let mut trigram = HashSet::<u32>::new();
+        self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        for each_trigram in TrigramIter::from_file(f, max_utf8_invalid) {
-            trigram.insert(try!(each_trigram));
+        let it = TrigramIter::from_file(f, max_utf8_invalid);
+        for each_trigram in it.take(MAX_TEXT_TRIGRAMS + 2) {
+            self.trigram.insert(try!(each_trigram));
         }
         // TODO: add invalid trigram count checking
-        if trigram.len() > MAX_TEXT_TRIGRAMS {
+        if self.trigram.len() > MAX_TEXT_TRIGRAMS {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
                                        "Too many trigrams, ignoring"));
         }
         self.bytes_written += size as usize;
 
         let file_id = try!(self.add_name(filename));
-        for each_trigram in trigram {
+        let mut v = Vec::<u32>::new();
+        mem::swap(&mut v, &mut self.trigram.dense_mut());
+        for each_trigram in v {
             if self.post.len() >= NPOST {
                 try!(self.flush_post());
             }
@@ -233,7 +240,7 @@ impl IndexWriter {
         heap.add_mem(v);
 
         let mut h = heap.into_vec().into_iter();
-        let mut e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
+        let mut e = h.next().unwrap_or_else(||PostEntry::new((1<<24)-1, 0));
         let offset0 = get_offset(&mut self.index).unwrap();
 
         loop {
@@ -252,7 +259,7 @@ impl IndexWriter {
                 IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
                 file_id = e.file_id();
                 nfile += 1;
-                e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
+                e = h.next().unwrap_or_else(|| PostEntry::new((1<<24)-1, 0));
             }
             IndexWriter::write_uvarint(&mut self.index, 0).unwrap();
 
@@ -343,8 +350,10 @@ impl PostEntry {
     }
 }
 
+const RING_BUF_SIZE: usize = 8;
+
 struct RingBuffer {
-    buf: [u8; 8],
+    buf: [u8; RING_BUF_SIZE],
     read_index: usize,
     write_index: usize,
     num_bytes: usize
@@ -353,7 +362,7 @@ struct RingBuffer {
 impl RingBuffer {
     pub fn new() -> RingBuffer {
         RingBuffer {
-            buf: [0; 8],
+            buf: [0; RING_BUF_SIZE],
             read_index: 0,
             write_index: 0,
             num_bytes: 0
@@ -375,7 +384,7 @@ impl RingBuffer {
         self.num_bytes
     }
     pub fn capacity() -> usize {
-        8
+        RING_BUF_SIZE
     }
     pub fn is_full(&self) -> bool { self.len() >= Self::capacity() }
     pub fn is_empty(&self) -> bool { self.len() == 0 }
@@ -629,12 +638,14 @@ fn test_trigram_iter_once() {
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
-    assert!(c == hel);
+    assert!(c.unwrap() == hel);
 }
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new(Box::new("hello".as_bytes())).collect();
+    let trigrams: Vec<u32> = TrigramIter::new(Box::new("hello".as_bytes()))
+        .map(Result::unwrap)
+        .collect();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);

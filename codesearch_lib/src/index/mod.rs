@@ -3,6 +3,7 @@ pub mod write;
 pub mod regexp;
 pub mod merge;
 mod search;
+mod sparseset;
 
 use std::env;
 
