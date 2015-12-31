@@ -643,7 +643,7 @@ fn test_ringbuffer_read() {
 
 #[test]
 fn test_trigram_iter_once() {
-    let c = TrigramIter::new(Box::new("hello".as_bytes())).next().unwrap();
+    let c = TrigramIter::new("hello".as_bytes(), 0).next().unwrap();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
@@ -652,7 +652,7 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new(Box::new("hello".as_bytes()))
+    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0)
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
