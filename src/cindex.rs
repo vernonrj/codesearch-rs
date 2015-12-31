@@ -202,8 +202,7 @@ With no path arguments, cindex -reset removes the index.")
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
         while let Ok(Some(f)) = rx.recv() {
             if !seen.contains(&f) {
-                seen.insert(f.clone());
-                match i.add_file(f) {
+                match i.add_file(&f) {
                     Ok(_) => (),
                     Err(ref e) if e.kind() == IndexErrorKind::IoError => panic!("IOError"),
                     Err(ref e) if e.kind() == IndexErrorKind::BinaryDataPresent => {
@@ -218,6 +217,7 @@ With no path arguments, cindex -reset removes the index.")
                         writeln!(&mut io::stderr(), "err with file: {}", e).unwrap();
                     }
                 }
+                seen.insert(f);
             }
         }
         info!("flush index");

@@ -151,12 +151,12 @@ impl IndexWriter {
     pub fn add_paths(&mut self, paths: Vec<OsString>) {
         self.paths.extend(paths);
     }
-    pub fn add_file(&mut self, filename: OsString) -> IndexResult<()> {
-        let f = try!(File::open(filename.clone()));
+    pub fn add_file(&mut self, filename: &OsString) -> IndexResult<()> {
+        let f = try!(File::open(filename));
         let metadata = try!(f.metadata());
         self.add(filename, f, metadata.len())
     }
-    fn add(&mut self, filename: OsString, f: File, size: u64) -> IndexResult<()> {
+    fn add(&mut self, filename: &OsString, f: File, size: u64) -> IndexResult<()> {
         if size > MAX_FILE_LEN {
             // writeln!(&mut io::stderr(), "{}: file too long, ignoring", filename);
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
@@ -185,7 +185,7 @@ impl IndexWriter {
         }
         Ok(())
     }
-    fn add_name(&mut self, filename: OsString) -> IndexResult<u32> {
+    fn add_name(&mut self, filename: &OsString) -> IndexResult<u32> {
         let offset = try!(get_offset(&mut self.name_data));
         self.name_index.write_u32::<BigEndian>(offset as u32).unwrap();
         let s = filename.to_str().expect("filename has invalid UTF-8 chars");
@@ -198,7 +198,7 @@ impl IndexWriter {
         Ok(id as u32)
     }
     pub fn flush(mut self) -> io::Result<()> {
-        self.add_name(OsString::new()).unwrap();
+        self.add_name(&OsString::new()).unwrap();
         Self::write_string(&mut self.index, index::MAGIC).unwrap();
 
         let mut off = [0; 5];
