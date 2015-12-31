@@ -164,7 +164,7 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        for each_trigram in TrigramIter::from_file(f, max_utf8_invalid) {
+        for each_trigram in TrigramIter::new(f, max_utf8_invalid) {
             self.trigram.insert(try!(each_trigram));
         }
         // TODO: add invalid trigram count checking
@@ -415,8 +415,8 @@ impl RingBuffer {
     }
 }
 
-struct TrigramIter {
-    reader: Box<Read>,
+struct TrigramIter<R: Read> {
+    reader: R,
     buffer: RingBuffer,
     current_value: u32,
     num_read: usize,
@@ -424,20 +424,10 @@ struct TrigramIter {
     max_invalid: u64
 }
 
-impl TrigramIter {
-    fn new(r: Box<Read>) -> TrigramIter {
+impl<R: Read> TrigramIter<R> {
+    fn new(r: R, max_invalid: u64) -> TrigramIter<R> {
         TrigramIter {
             reader: r,
-            buffer: RingBuffer::new(),
-            current_value: 0,
-            num_read: 0,
-            inv_cnt: 0,
-            max_invalid: 0
-        }
-    }
-    pub fn from_file(f: File, max_invalid: u64) -> TrigramIter {
-        TrigramIter {
-            reader: Box::new(f),
             buffer: RingBuffer::new(),
             current_value: 0,
             num_read: 0,
@@ -468,7 +458,7 @@ impl TrigramIter {
     }
 }
 
-impl Iterator for TrigramIter {
+impl<R: Read> Iterator for TrigramIter<R> {
     type Item = IndexResult<u32>;
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
