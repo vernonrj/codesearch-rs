@@ -14,6 +14,8 @@ use std::fmt;
 use std::ops::Deref;
 use std::u32;
 use std::mem;
+use std::sync::mpsc::{self, Sender, Receiver};
+use std::thread;
 
 use tempfile::{TempFile, NamedTempFile};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -116,8 +118,9 @@ pub struct IndexWriter {
     pub number_of_names_written: usize,
     pub bytes_written: usize,
 
-    post: Vec<PostEntry>,
-    post_files: Vec<NamedTempFile>,
+    post_writer: Option<thread::JoinHandle<Vec<PostEntry>>>,
+    post: Sender<Option<(u32, Vec<u32>)>>,
+    post_files: Receiver<Option<NamedTempFile>>,
     post_index: TempFile,
 
     input_buffer: [u8; 16384],
@@ -133,6 +136,20 @@ impl IndexWriter {
     // TODO: use Path
     pub fn new(filename: String) -> IndexWriter {
         let f = File::create(filename).expect("failed to make index!");
+        let (post, rx) = mpsc::channel();
+        let (tx, post_files) = mpsc::channel();
+        let h = thread::spawn(move || {
+            let mut post = Vec::<PostEntry>::new();
+            while let Ok(Some((file_id, v))) = rx.recv() {
+                for each in v {
+                    if post.len() >= NPOST {
+                        tx.send(Some(flush_post(&mut post).unwrap())).unwrap();
+                    }
+                    post.push(PostEntry::new(each, file_id));
+                }
+            }
+            post
+        });
         IndexWriter {
             buf: [0; 8],
             paths: Vec::new(),
@@ -141,8 +158,9 @@ impl IndexWriter {
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
-            post: Vec::new(),
-            post_files: Vec::new(),
+            post_writer: Some(h),
+            post: post,
+            post_files: post_files,
             post_index: TempFile::new().expect("failed to make tempfile"),
             input_buffer: [0; 16384],
             index: BufWriter::new(f)
@@ -177,12 +195,13 @@ impl IndexWriter {
         let file_id = try!(self.add_name(filename));
         let mut v = Vec::<u32>::new();
         mem::swap(&mut v, &mut self.trigram.dense_mut());
-        for each_trigram in v {
-            if self.post.len() >= NPOST {
-                try!(self.flush_post());
-            }
-            self.post.push(PostEntry::new(each_trigram, file_id));
-        }
+        self.post.send(Some((file_id, v))).unwrap();
+        // for each_trigram in v {
+        //     if self.post.len() >= NPOST {
+        //         try!(self.flush_post());
+        //     }
+        //     self.post.push(PostEntry::new(each_trigram, file_id));
+        // }
         Ok(())
     }
     fn add_name(&mut self, filename: &OsString) -> IndexResult<u32> {
@@ -228,15 +247,17 @@ impl IndexWriter {
     }
     fn merge_post(&mut self) -> io::Result<()> {
         let mut heap = PostHeap::new();
-        info!("merge {} files + mem", self.post_files.len());
+        self.post.send(None).unwrap();
 
-        for f in &self.post_files {
+        let mut num_post_files = 0;
+        while let Ok(Some(f)) = self.post_files.recv() {
             heap.add_file(f.deref()).unwrap();
+            num_post_files += 1;
         }
-        self.post.sort();
-        let mut v = Vec::new();
-        mem::swap(&mut v, &mut self.post);
-        heap.add_mem(v);
+        info!("merge {} files + mem", num_post_files);
+
+        let post_writer = self.post_writer.take().unwrap();
+        heap.add_mem(post_writer.join().unwrap());
 
         let mut h = heap.into_vec().into_iter();
         let mut e = h.next().unwrap_or_else(||PostEntry::new((1<<24)-1, 0));
@@ -270,17 +291,6 @@ impl IndexWriter {
                 break;
             }
         }
-        Ok(())
-    }
-    fn flush_post(&mut self) -> io::Result<()> {
-        self.post.sort();
-        let mut f = try!(NamedTempFile::new());
-        for each in &self.post {
-            try!(f.write_u64::<BigEndian>(each.value()));
-        }
-        self.post = Vec::new();
-        try!(f.seek(SeekFrom::Start(0)));
-        self.post_files.push(f);
         Ok(())
     }
     pub fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<usize> {
@@ -322,6 +332,16 @@ impl IndexWriter {
                                ((x >> 21) & 0xff) as u8])
         }
     }
+}
+
+fn flush_post(v: &mut Vec<PostEntry>) -> io::Result<NamedTempFile> {
+    let mut f = try!(NamedTempFile::new());
+    for each in v.iter() {
+        try!(f.write_u64::<BigEndian>(each.value()));
+    }
+    v.clear();
+    try!(f.seek(SeekFrom::Start(0)));
+    Ok(f)
 }
 
 pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
