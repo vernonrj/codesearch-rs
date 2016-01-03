@@ -139,7 +139,7 @@ impl IndexWriter {
         let (post, rx) = mpsc::channel();
         let (tx, post_files) = mpsc::channel();
         let h = thread::spawn(move || {
-            let mut post = Vec::<PostEntry>::new();
+            let mut post = Vec::<PostEntry>::with_capacity(NPOST);
             while let Ok(Some((file_id, v))) = rx.recv() {
                 for each in v {
                     if post.len() >= NPOST {
@@ -369,7 +369,7 @@ impl PostEntry {
     }
 }
 
-const RING_BUF_SIZE: usize = 8;
+const RING_BUF_SIZE: usize = 8000;
 
 struct RingBuffer {
     buf: [u8; RING_BUF_SIZE],
