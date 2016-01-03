@@ -108,8 +108,8 @@ pub struct IndexWriter {
     buf: [u8; 8],
     paths: Vec<OsString>,
 
-    name_data: TempFile,
-    name_index: TempFile,
+    name_data: BufWriter<TempFile>,
+    name_index: BufWriter<TempFile>,
 
     trigram: SparseSet,
 
@@ -118,9 +118,9 @@ pub struct IndexWriter {
 
     post: Vec<PostEntry>,
     post_files: Vec<NamedTempFile>,
-    post_index: TempFile,
+    post_index: BufWriter<TempFile>,
 
-    input_buffer: [u8; 16384],
+    trigram_reader: TrigramReader,
 
     index: BufWriter<File>
 }
@@ -128,7 +128,7 @@ pub struct IndexWriter {
 impl IndexWriter {
     fn make_temp_buf() -> BufWriter<TempFile> {
         let w = TempFile::new().expect("failed to make tempfile!");
-        BufWriter::new(w)
+        BufWriter::with_capacity(256 << 10, w)
     }
     // TODO: use Path
     pub fn new(filename: String) -> IndexWriter {
@@ -136,16 +136,16 @@ impl IndexWriter {
         IndexWriter {
             buf: [0; 8],
             paths: Vec::new(),
-            name_data: TempFile::new().expect("failed to make tempfile"),
-            name_index: TempFile::new().expect("failed to make tempfile"),
+            name_data: Self::make_temp_buf(),
+            name_index: Self::make_temp_buf(),
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
-            post: Vec::new(),
+            post: Vec::with_capacity(NPOST),
             post_files: Vec::new(),
-            post_index: TempFile::new().expect("failed to make tempfile"),
-            input_buffer: [0; 16384],
-            index: BufWriter::new(f)
+            post_index: Self::make_temp_buf(),
+            trigram_reader: TrigramReader::new(),
+            index: BufWriter::with_capacity(256 << 10, f)
         }
     }
     pub fn add_paths(&mut self, paths: Vec<OsString>) {
@@ -164,7 +164,7 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        for each_trigram in TrigramIter::new(f, max_utf8_invalid) {
+        for each_trigram in self.trigram_reader.open(f, max_utf8_invalid) {
             self.trigram.insert(try!(each_trigram));
         }
         // TODO: add invalid trigram count checking
@@ -210,13 +210,13 @@ impl IndexWriter {
         }
         Self::write_string(&mut self.index, "\0").unwrap();
         off[1] = get_offset(&mut self.index).unwrap();
-        copy_file(&mut self.index, &mut self.name_data);
+        copy_file(&mut self.index, &mut self.name_data.get_mut());
         off[2] = get_offset(&mut self.index).unwrap();
         self.merge_post().unwrap();
         off[3] = get_offset(&mut self.index).unwrap();
-        copy_file(&mut self.index, &mut self.name_index);
+        copy_file(&mut self.index, &mut self.name_index.get_mut());
         off[4] = get_offset(&mut self.index).unwrap();
-        copy_file(&mut self.index, &mut self.post_index);
+        copy_file(&mut self.index, &mut self.post_index.get_mut());
         for v in off.iter() {
             Self::write_u32(&mut self.index, *v as u32).unwrap();
         }
@@ -274,13 +274,13 @@ impl IndexWriter {
     }
     fn flush_post(&mut self) -> io::Result<()> {
         self.post.sort();
-        let mut f = try!(NamedTempFile::new());
+        let mut f = BufWriter::with_capacity(NPOST, try!(NamedTempFile::new()));
         for each in &self.post {
             try!(f.write_u64::<BigEndian>(each.value()));
         }
-        self.post = Vec::new();
+        self.post.clear();
         try!(f.seek(SeekFrom::Start(0)));
-        self.post_files.push(f);
+        self.post_files.push(try!(f.into_inner()));
         Ok(())
     }
     pub fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<usize> {
@@ -349,7 +349,7 @@ impl PostEntry {
     }
 }
 
-const RING_BUF_SIZE: usize = 8000;
+const RING_BUF_SIZE: usize = 16384;
 
 struct RingBuffer {
     buf: [u8; RING_BUF_SIZE],
@@ -415,20 +415,20 @@ impl RingBuffer {
     }
 }
 
-struct TrigramIter<R: Read> {
+struct TrigramIter<'a, R: Read> {
     reader: R,
-    buffer: RingBuffer,
+    buffer: &'a mut RingBuffer,
     current_value: u32,
     num_read: usize,
     inv_cnt: u64,
     max_invalid: u64
 }
 
-impl<R: Read> TrigramIter<R> {
-    fn new(r: R, max_invalid: u64) -> TrigramIter<R> {
+impl<'a, R: Read> TrigramIter<'a, R> {
+    fn new(r: R, max_invalid: u64, buffer: &'a mut RingBuffer) -> TrigramIter<'a, R> {
         TrigramIter {
             reader: r,
-            buffer: RingBuffer::new(),
+            buffer: buffer,
             current_value: 0,
             num_read: 0,
             inv_cnt: 0,
@@ -458,7 +458,7 @@ impl<R: Read> TrigramIter<R> {
     }
 }
 
-impl<R: Read> Iterator for TrigramIter<R> {
+impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
     type Item = IndexResult<u32>;
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
@@ -498,6 +498,22 @@ impl<R: Read> Iterator for TrigramIter<R> {
         }
     }
 }
+
+struct TrigramReader {
+    buffer: RingBuffer,
+}
+
+impl TrigramReader {
+    pub fn new() -> TrigramReader {
+        TrigramReader {
+            buffer: RingBuffer::new()
+        }
+    }
+    pub fn open<'a, R: Read>(&'a mut self, r: R, max_invalid: u64) -> TrigramIter<'a, R> {
+        TrigramIter::new(r, max_invalid, &mut self.buffer)
+    }
+}
+
 
 pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R) {
     src.seek(SeekFrom::Start(0)).unwrap();
@@ -623,7 +639,7 @@ fn test_ringbuffer_read() {
 
 #[test]
 fn test_trigram_iter_once() {
-    let c = TrigramIter::new("hello".as_bytes(), 0).next().unwrap();
+    let c = TrigramReader::new(0).open("hello".as_bytes()).next().unwrap();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
@@ -632,7 +648,7 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0)
+    let trigrams: Vec<u32> = TrigramReader::new(0).open("hello".as_bytes())
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
