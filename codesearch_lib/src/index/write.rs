@@ -210,12 +210,15 @@ impl IndexWriter {
         }
         Self::write_string(&mut self.index, "\0").unwrap();
         off[1] = get_offset(&mut self.index).unwrap();
+        self.name_data.flush().unwrap();
         copy_file(&mut self.index, &mut self.name_data.get_mut());
         off[2] = get_offset(&mut self.index).unwrap();
         self.merge_post().unwrap();
         off[3] = get_offset(&mut self.index).unwrap();
+        self.name_index.flush().unwrap();
         copy_file(&mut self.index, &mut self.name_index.get_mut());
         off[4] = get_offset(&mut self.index).unwrap();
+        self.post_index.flush().unwrap();
         copy_file(&mut self.index, &mut self.post_index.get_mut());
         for v in off.iter() {
             Self::write_u32(&mut self.index, *v as u32).unwrap();
@@ -367,6 +370,11 @@ impl RingBuffer {
             num_bytes: 0
         }
     }
+    pub fn clear(&mut self) {
+        self.read_index = 0;
+        self.write_index = 0;
+        self.num_bytes = 0;
+    }
     pub fn with_buf_mut<F>(&mut self, f: F) -> io::Result<usize>
         where F: FnOnce(&mut [u8]) -> io::Result<usize>
     {
@@ -426,6 +434,7 @@ struct TrigramIter<'a, R: Read> {
 
 impl<'a, R: Read> TrigramIter<'a, R> {
     fn new(r: R, max_invalid: u64, buffer: &'a mut RingBuffer) -> TrigramIter<'a, R> {
+        buffer.clear();
         TrigramIter {
             reader: r,
             buffer: buffer,
