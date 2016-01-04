@@ -74,7 +74,7 @@ use index::TRAILER_MAGIC;
 use index::memmap::{Mmap, Protection};
 use index::byteorder::{BigEndian, ReadBytesExt};
 
-use index::regexp::{Query, QueryOperation};
+use super::regexp::{Query, QueryOperation};
 use super::search;
 
 pub const POST_ENTRY_SIZE: usize = 3 + 4 + 4;

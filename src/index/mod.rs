@@ -6,13 +6,11 @@ extern crate memmap;
 extern crate regex;
 extern crate regex_syntax;
 
+
 pub mod reader;
 pub mod writer;
 pub mod merge;
 mod varint;
-
-pub use self::writer::write;
-pub use self::reader::{read, regexp};
 
 use std::env;
 

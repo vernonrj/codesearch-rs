@@ -32,8 +32,8 @@
 // Rename C's index onto the new index.
 
 use index::varint;
-use index::read::{Index, POST_ENTRY_SIZE};
-use index::write::{get_offset, copy_file, IndexWriter};
+use index::reader::read::{Index, POST_ENTRY_SIZE};
+use index::writer::write::{get_offset, copy_file, IndexWriter};
 use index;
 
 use index::tempfile::TempFile;

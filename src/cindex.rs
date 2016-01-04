@@ -12,8 +12,8 @@ extern crate log;
 mod customlogger;
 mod index;
 
-use index::read::Index;
-use index::write::IndexErrorKind;
+use index::reader::read::Index;
+use index::writer::write::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 
 use std::collections::HashSet;
@@ -154,7 +154,7 @@ With no path arguments, cindex -reset removes the index.")
     if matches.is_present("list-paths") {
         // TODO: fail gracefully if index doesn't exist
         let index_path = index::csearch_index();
-        let i = index::read::Index::open(index_path).expect("Index open failed!");
+        let i = Index::open(index_path).expect("Index open failed!");
         for each_file in i.indexed_paths() {
             println!("{}", each_file);
         }
@@ -185,7 +185,7 @@ With no path arguments, cindex -reset removes the index.")
 
     if args.is_empty() {
         let index_path = index::csearch_index();
-        let i = index::read::Index::open(index_path).expect("failed to open Index");
+        let i = Index::open(index_path).expect("failed to open Index");
         for each_file in i.indexed_paths() {
             args.push(each_file);
         }
@@ -211,7 +211,7 @@ With no path arguments, cindex -reset removes the index.")
     let log_skipped = matches.is_present("logskip");
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
-        let mut i = index::write::IndexWriter::new(index_path_cloned);
+        let mut i = IndexWriter::new(index_path_cloned);
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
         while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {

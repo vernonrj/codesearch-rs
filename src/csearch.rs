@@ -16,6 +16,9 @@ mod customlogger;
 mod index;
 mod grep;
 
+use index::reader::regexp;
+use index::reader::read::Index;
+
 use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
@@ -113,11 +116,11 @@ empty, $HOME/.csearchindex.
 
     // Get the index from file
     let index_path = index::csearch_index();
-    let i = index::read::Index::open(index_path).unwrap();
+    let i = Index::open(index_path).unwrap();
 
     // Get the pseudo-regexp (built using trigrams)
     let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
-    let q = index::regexp::RegexInfo::new(&expr).query;
+    let q = regexp::RegexInfo::new(&expr).query;
 
     // Find all possibly matching files using the pseudo-regexp
     let mut post = i.query(q, None);
