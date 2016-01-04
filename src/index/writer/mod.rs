@@ -10,6 +10,7 @@ mod sparseset;
 
 mod postentry;
 mod postheap;
+mod trigramiter;
 
 const NPOST: usize = (64 << 20) / 8;
 
