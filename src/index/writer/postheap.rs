@@ -21,7 +21,11 @@ impl PostHeap {
             ch: Vec::new()
         }
     }
-    pub fn len(&self) -> usize { self.ch.len() }
+    pub fn len(&self) -> usize {
+        self.ch.iter()
+            .map(|i| i.size_hint().0)
+            .fold(0, |a, b| a + b)
+    }
     pub fn is_empty(&self) -> bool { self.ch.is_empty() }
     pub fn add_file(&mut self, f: &File) -> io::Result<()> {
         let m = try!(Mmap::open(f, Protection::Read));
@@ -40,27 +44,27 @@ impl PostHeap {
 
 impl IntoIterator for PostHeap {
     type Item = PostEntry;
-    type IntoIter = PostHeapIntoIter;
+    type IntoIter = IntoIter;
     fn into_iter(self) -> Self::IntoIter {
-        PostHeapIntoIter {
+        IntoIter {
             inner: self
         }
     }
 }
 
-pub struct PostHeapIntoIter {
+pub struct IntoIter {
     inner: PostHeap
 }
 
-impl PostHeapIntoIter {
+impl IntoIter {
     pub fn new(inner: PostHeap) -> Self {
-        PostHeapIntoIter {
+        IntoIter {
             inner: inner
         }
     }
 }
 
-impl Iterator for PostHeapIntoIter {
+impl Iterator for IntoIter {
     type Item = PostEntry;
     fn next(&mut self) -> Option<Self::Item> {
         let min_idx = if self.inner.ch.is_empty() {
@@ -91,3 +95,49 @@ impl Iterator for PostHeapIntoIter {
     }
 }
 
+mod tests {
+    use super::*;
+    use super::super::postentry::PostEntry;
+
+    #[test]
+    fn test_postheap_build() {
+        let p = PostHeap::new();
+        assert!(p.len() == 0);
+        assert!(p.is_empty());
+    }
+
+    #[test]
+    fn test_postheap_add_mem() {
+        let mut p = PostHeap::new();
+        p.add_mem(vec![PostEntry::new(0, 32),
+                       PostEntry::new(5, 32)]);
+        assert!(p.len() == 2);
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn test_postheap_iter_single() {
+        let mut p = PostHeap::new();
+        let v = vec![PostEntry::new(0, 32), PostEntry::new(5, 32)];
+        p.add_mem(v.clone());
+        assert!(p.into_iter().collect::<Vec<_>>() == v);
+    }
+
+    #[test]
+    fn test_postheap_iter_mult() {
+        let v1 = vec![PostEntry::new(0, 32), PostEntry::new(5, 32)];
+        let v2 = vec![PostEntry::new(2, 32), PostEntry::new(6, 32)];
+        let v_comb = {
+            let mut v = v1.clone();
+            v.extend(v2.iter().cloned());
+            v.sort();
+            v
+        };
+        let mut p = PostHeap::new();
+        p.add_mem(v1.clone());
+        p.add_mem(v2.clone());
+        assert!(p.len() == v_comb.len());
+        assert!(!p.is_empty());
+        assert!(p.into_iter().collect::<Vec<_>>() == v_comb);
+    }
+}
