@@ -20,7 +20,7 @@ use index::{MAGIC, TRAILER_MAGIC};
 
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
-use super::{copy_file, get_offset};
+use super::{copy_file, get_offset, write_u32};
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
 use super::trigramiter::TrigramIter;
@@ -66,22 +66,18 @@ pub struct IndexWriter {
 }
 
 impl IndexWriter {
-    fn make_temp_buf() -> BufWriter<TempFile> {
-        let w = TempFile::new().expect("failed to make tempfile!");
-        BufWriter::with_capacity(256 << 10, w)
-    }
     pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
         let f = File::create(filename).expect("failed to make index!");
         IndexWriter {
             paths: Vec::new(),
-            name_data: Self::make_temp_buf(),
-            name_index: Self::make_temp_buf(),
+            name_data: make_temp_buf(),
+            name_index: make_temp_buf(),
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
             post: Vec::with_capacity(NPOST),
             post_files: Vec::new(),
-            post_index: Self::make_temp_buf(),
+            post_index: make_temp_buf(),
             index: BufWriter::with_capacity(256 << 10, f)
         }
     }
@@ -130,7 +126,7 @@ impl IndexWriter {
         let offset = try!(get_offset(&mut self.name_data));
         self.name_index.write_u32::<BigEndian>(offset as u32).unwrap();
         let s = filename.to_str().expect("filename has invalid UTF-8 chars");
-        try!(Self::write_string(&mut self.name_data, s));
+        try!(self.name_data.write(s.as_bytes()));
 
         self.name_data.write_u8(0).unwrap();
 
@@ -138,36 +134,36 @@ impl IndexWriter {
         self.number_of_names_written += 1;
         Ok(id as u32)
     }
-    pub fn flush(mut self) -> io::Result<()> {
-        self.add_name(&OsString::new()).unwrap();
-        Self::write_string(&mut self.index, MAGIC).unwrap();
+    pub fn flush(mut self) -> IndexResult<()> {
+        try!(self.add_name(&OsString::new()));
+        try!(self.index.write(MAGIC.as_bytes()));
 
         let mut off = [0; 5];
-        off[0] = get_offset(&mut self.index).unwrap();
+        off[0] = try!(get_offset(&mut self.index));
 
         for p in &self.paths {
-            Self::write_string(&mut self.index, p.to_str().unwrap()).unwrap();
-            Self::write_string(&mut self.index, "\0").unwrap();
+            try!(self.index.write(p.to_str().unwrap().as_bytes()));
+            try!(self.index.write("\0".as_bytes()));
         }
-        Self::write_string(&mut self.index, "\0").unwrap();
-        off[1] = get_offset(&mut self.index).unwrap();
-        self.name_data.flush().unwrap();
+        try!(self.index.write("\0".as_bytes()));
+        off[1] = try!(get_offset(&mut self.index));
+        try!(self.name_data.flush());
         copy_file(&mut self.index, &mut self.name_data.get_mut());
-        off[2] = get_offset(&mut self.index).unwrap();
-        self.merge_post().unwrap();
-        off[3] = get_offset(&mut self.index).unwrap();
-        self.name_index.flush().unwrap();
+        off[2] = try!(get_offset(&mut self.index));
+        try!(self.merge_post());
+        off[3] = try!(get_offset(&mut self.index));
+        try!(self.name_index.flush());
         copy_file(&mut self.index, &mut self.name_index.get_mut());
-        off[4] = get_offset(&mut self.index).unwrap();
-        self.post_index.flush().unwrap();
+        off[4] = try!(get_offset(&mut self.index));
+        try!(self.post_index.flush());
         copy_file(&mut self.index, &mut self.post_index.get_mut());
         for v in off.iter() {
-            Self::write_u32(&mut self.index, *v as u32).unwrap();
+            try!(write_u32(&mut self.index, *v as u32));
         }
-        Self::write_string(&mut self.index, TRAILER_MAGIC).unwrap();
+        try!(self.index.write(TRAILER_MAGIC.as_bytes()));
         info!("{} data bytes, {} index bytes",
               self.bytes_written,
-              get_offset(&mut self.index).unwrap());
+              try!(get_offset(&mut self.index)));
         Ok(())
     }
     fn merge_post(&mut self) -> io::Result<()> {
@@ -208,8 +204,8 @@ impl IndexWriter {
             varint::write_uvarint(&mut self.index, 0).unwrap();
 
             self.post_index.write(&mut buf).unwrap();
-            Self::write_u32(&mut self.post_index, nfile).unwrap();
-            Self::write_u32(&mut self.post_index, offset as u32).unwrap();
+            write_u32(&mut self.post_index, nfile).unwrap();
+            write_u32(&mut self.post_index, offset as u32).unwrap();
 
             if trigram == (1<<24)-1 {
                 break;
@@ -229,21 +225,9 @@ impl IndexWriter {
         self.post_files.push(try!(f.into_inner()));
         Ok(())
     }
-    pub fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<usize> {
-        writer.write(s.as_bytes())
-    }
-    pub fn write_trigram<W: Write>(writer: &mut W, t: u32) -> io::Result<usize> {
-        let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
-                                ((t >> 8) & 0xff) as u8,
-                                (t & 0xff) as u8];
-        writer.write(&mut buf)
-    }
-    pub fn write_u32<W: Write>(writer: &mut W, u: u32) -> io::Result<usize> {
-        let mut buf: [u8; 4] = [((u >> 24) & 0xff) as u8,
-                                ((u >> 16) & 0xff) as u8,
-                                ((u >> 8) & 0xff) as u8,
-                                (u & 0xff) as u8];
-        writer.write(&mut buf)
-    }
 }
 
+fn make_temp_buf() -> BufWriter<TempFile> {
+    let w = TempFile::new().expect("failed to make tempfile!");
+    BufWriter::with_capacity(256 << 10, w)
+}

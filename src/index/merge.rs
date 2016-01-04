@@ -33,7 +33,7 @@
 
 use index::varint;
 use index::reader::read::{Index, POST_ENTRY_SIZE};
-use index::writer::{get_offset, copy_file, IndexWriter};
+use index::writer::{get_offset, copy_file, write_trigram, write_u32};
 use index;
 
 use index::tempfile::TempFile;
@@ -165,7 +165,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
     }
     pub fn file_id(&mut self, id: u32) {
         if self.count == 0 {
-            IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
+            write_trigram(&mut self.out, self.t).unwrap();
         }
         varint::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
@@ -176,9 +176,9 @@ impl<W: Write + Seek> PostDataWriter<W> {
             return;
         }
         varint::write_uvarint(&mut self.out, 0).unwrap();
-        IndexWriter::write_trigram(&mut self.post_index_file, self.t).unwrap();
-        IndexWriter::write_u32(&mut self.post_index_file, self.count).unwrap();
-        IndexWriter::write_u32(&mut self.post_index_file, self.offset - self.base).unwrap();
+        write_trigram(&mut self.post_index_file, self.t).unwrap();
+        write_u32(&mut self.post_index_file, self.count).unwrap();
+        write_u32(&mut self.post_index_file, self.offset - self.base).unwrap();
     }
 }
 
@@ -241,7 +241,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     }
     let num_name = new;
     let mut ix3 = BufWriter::new(try!(File::create(dest)));
-    IndexWriter::write_string(&mut ix3, index::MAGIC).unwrap();
+    try!(ix3.write(index::MAGIC.as_bytes()));
 
     let path_data = try!(get_offset(&mut ix3));
     let mut mi1 = 0;
@@ -262,10 +262,10 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             continue;
         }
         last = p.clone();
-        IndexWriter::write_string(&mut ix3, &p).unwrap();
-        IndexWriter::write_string(&mut ix3, "\0").unwrap();
+        try!(ix3.write(&p.as_bytes()));
+        try!(ix3.write("\0".as_bytes()));
     }
-    IndexWriter::write_string(&mut ix3, "\0").unwrap();
+    try!(ix3.write("\0".as_bytes()));
 
     // Merged list of names
     let name_data = try!(get_offset(&mut ix3));
@@ -281,8 +281,8 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
                 let name = ix1.name(i);
                 let new_offset: u32 = try!(get_offset(&mut ix3)) as u32;
                 name_index_file.write_u32::<BigEndian>(new_offset - (name_data as u32)).unwrap();
-                IndexWriter::write_string(&mut ix3, &name).unwrap();
-                IndexWriter::write_string(&mut ix3, "\0").unwrap();
+                try!(ix3.write(&name.as_bytes()));
+                try!(ix3.write("\0".as_bytes()));
                 new += 1;
             }
             mi1 += 1;
@@ -291,8 +291,8 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
                 let name = ix2.name(i);
                 let new_offset: u32 = try!(get_offset(&mut ix3)) as u32;
                 name_index_file.write_u32::<BigEndian>(new_offset - (name_data as u32)).unwrap();
-                IndexWriter::write_string(&mut ix3, &name).unwrap();
-                IndexWriter::write_string(&mut ix3, "\0").unwrap();
+                try!(ix3.write(&name.as_bytes()));
+                try!(ix3.write("\0".as_bytes()));
                 new += 1;
             }
             mi2 += 1;
@@ -369,11 +369,11 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     trace!("post_index = {}", post_index); 
 
 
-    IndexWriter::write_u32(&mut ix3, path_data as u32).unwrap();
-    IndexWriter::write_u32(&mut ix3, name_data as u32).unwrap();
-    IndexWriter::write_u32(&mut ix3, post_data as u32).unwrap();
-    IndexWriter::write_u32(&mut ix3, name_index as u32).unwrap();
-    IndexWriter::write_u32(&mut ix3, post_index as u32).unwrap();
-    IndexWriter::write_string(&mut ix3, index::TRAILER_MAGIC).unwrap();
+    write_u32(&mut ix3, path_data as u32).unwrap();
+    write_u32(&mut ix3, name_data as u32).unwrap();
+    write_u32(&mut ix3, post_data as u32).unwrap();
+    write_u32(&mut ix3, name_index as u32).unwrap();
+    write_u32(&mut ix3, post_index as u32).unwrap();
+    try!(ix3.write(index::TRAILER_MAGIC.as_bytes()));
     Ok(())
 }
