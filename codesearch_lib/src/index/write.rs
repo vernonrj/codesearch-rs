@@ -370,9 +370,9 @@ impl<R: Read> TrigramIter<R> {
     fn next_char(&mut self) -> io::Result<Option<u8>> {
         match self.reader.next() {
             Some(Err(e)) => Err(e),
-            Some(Ok(n)) => {
+            Some(Ok(c)) => {
                 self.num_read += 1;
-                Ok(Some(n))
+                Ok(Some(c))
             },
             None => Ok(None)
         }
@@ -498,7 +498,7 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), )
+    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0)
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
