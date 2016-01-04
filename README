@@ -9,5 +9,5 @@ see http://swtch.com/~rsc/regexp/regexp4.html.
 
 to install:
     git clone https://github.com/vernonrj/codesearch-rs 
-    cargo install -root INSTALL_PATH -path codesearch-rs
+    cargo install --root INSTALL_PATH --path codesearch-rs
 
