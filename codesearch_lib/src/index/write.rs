@@ -107,7 +107,6 @@ impl fmt::Display for IndexError {
 pub type IndexResult<T> = Result<T, IndexError>;
 
 pub struct IndexWriter {
-    buf: [u8; 8],
     paths: Vec<OsString>,
 
     name_data: BufWriter<TempFile>,
@@ -133,7 +132,6 @@ impl IndexWriter {
     pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
         let f = File::create(filename).expect("failed to make index!");
         IndexWriter {
-            buf: [0; 8],
             paths: Vec::new(),
             name_data: Self::make_temp_buf(),
             name_index: Self::make_temp_buf(),
@@ -246,14 +244,15 @@ impl IndexWriter {
         loop {
             let offset = get_offset(&mut self.index).unwrap() - offset0;
             let trigram = e.trigram();
-            self.buf[0] = ((trigram >> 16) & 0xff) as u8;
-            self.buf[1] = ((trigram >> 8) & 0xff) as u8;
-            self.buf[2] = (trigram & 0xff) as u8;
+            let mut buf: [u8; 3] = [
+                ((trigram >> 16) & 0xff) as u8,
+                ((trigram >> 8) & 0xff) as u8,
+                (trigram & 0xff) as u8];
 
             // posting list
             let mut file_id = u32::MAX;
             let mut nfile: u32 = 0;
-            self.index.write(&mut self.buf[..3]).unwrap();
+            self.index.write(&mut buf).unwrap();
             while e.trigram() == trigram && (trigram != (1<<24)-1) {
                 let fdiff = e.file_id().wrapping_sub(file_id);
                 IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
@@ -263,7 +262,7 @@ impl IndexWriter {
             }
             IndexWriter::write_uvarint(&mut self.index, 0).unwrap();
 
-            self.post_index.write(&mut self.buf[..3]).unwrap();
+            self.post_index.write(&mut buf).unwrap();
             Self::write_u32(&mut self.post_index, nfile).unwrap();
             Self::write_u32(&mut self.post_index, offset as u32).unwrap();
 

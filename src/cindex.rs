@@ -192,7 +192,7 @@ With no path arguments, cindex -reset removes the index.")
         index_path.push('~');
     }
 
-    let (tx, rx) = mpsc::channel::<Option<OsString>>();
+    let (tx, rx) = mpsc::channel::<OsString>();
     // copying these variables into the worker thread
     let index_path_cloned = index_path.clone();
     let paths_cloned = paths.clone();
@@ -200,7 +200,7 @@ With no path arguments, cindex -reset removes the index.")
         let mut seen = HashSet::<OsString>::new();
         let mut i = index::write::IndexWriter::new(index_path_cloned);
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
-        while let Ok(Some(f)) = rx.recv() {
+        while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {
                 match i.add_file(&f) {
                     Ok(_) => (),
@@ -232,10 +232,10 @@ With no path arguments, cindex -reset removes the index.")
         info!("index {}", p.display());
         let tx = tx.clone();
         walk_dir(Path::new(&p), &move |d: &DirEntry| {
-            tx.send(Some(d.path().into_os_string())).unwrap();
+            tx.send(d.path().into_os_string()).unwrap();
         }).unwrap();
     }
-    tx.send(None).unwrap();
+    drop(tx);
     h.join().unwrap();
     if needs_merge {
         let dest_path = index_path.clone() + &"~";

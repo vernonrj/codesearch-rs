@@ -148,7 +148,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         let base = get_offset(&mut out).unwrap() as u32;
         PostDataWriter {
             out: out,
-            post_index_file: BufWriter::new(TempFile::new().unwrap()),
+            post_index_file: BufWriter::with_capacity(256 << 10, TempFile::new().unwrap()),
             base: base,
             count: 0,
             offset: 0,
