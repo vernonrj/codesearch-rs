@@ -7,13 +7,12 @@ extern crate regex;
 extern crate regex_syntax;
 extern crate varint;
 
-pub mod read;
+pub mod reader;
 pub mod writer;
 pub mod merge;
-pub mod regexp;
-mod search;
 
 pub use self::writer::write;
+pub use self::reader::{read, regexp};
 
 use std::env;
 

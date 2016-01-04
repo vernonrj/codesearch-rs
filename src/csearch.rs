@@ -16,7 +16,7 @@ mod customlogger;
 mod index;
 mod grep;
 
-use std::io::Write;
+use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
 
@@ -155,7 +155,10 @@ empty, $HOME/.csearchindex.
                     break 'files;
                 }
             }
-            line_printer.print_line(&name, &each_line);
+            match line_printer.print_line(&name, &each_line) {
+                Ok(_) => (),
+                Err(_) => return
+            }
         }
     }
     if match_options.print_count {
@@ -206,7 +209,7 @@ impl<'a> LinePrinter<'a> {
             self.num_matches.insert(filename.to_string(), 1);
         }
     }
-    fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) {
+    fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) -> io::Result<()> {
         self.increment_file_match(filename);
         if self.all_lines_printed() {
             let mut out_line = String::new();
@@ -217,11 +220,11 @@ impl<'a> LinePrinter<'a> {
                 out_line.push_str(":");
             }
             out_line.push_str(&result.line);
-            println!("{}", out_line);
+            writeln!(&mut std::io::stdout(), "{}", out_line)
         } else if self.only_filenames_printed() {
-            return;
+            return Ok(());
         } else {
-            return;
+            return Ok(());
         }
     }
 }

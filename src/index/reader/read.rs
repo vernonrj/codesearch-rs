@@ -69,12 +69,12 @@ use std::fmt;
 use std::fmt::Debug;
 use std::io::Cursor;
 
+use index;
 use index::memmap::{Mmap, Protection};
 use index::byteorder::{BigEndian, ReadBytesExt};
-use index::varint::VarintRead;
 
 use index::regexp::{Query, QueryOperation};
-use index::search;
+use super::search;
 
 static TRAILER_MAGIC: &'static str = "\ncsearch trailr\n";
 pub const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
@@ -381,7 +381,7 @@ struct PostReader<'a, 'b> {
     count: isize,
     offset: u32,
     fileid: i64,
-    d: Cursor<Vec<u8>>,
+    d: &'a [u8],
     restrict: &'b mut Option<Vec<u32>>
 }
 
@@ -397,8 +397,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
         let view = unsafe {
             let v = index.data.as_slice();
             let split_point = (index.post_data as usize) + (offset as usize) + 3;
-            let (_, v1) = v.split_at(split_point);
-            Cursor::new(v1.iter().cloned().collect::<Vec<_>>())
+            v.split_at(split_point).1
         };
         Some(PostReader {
             index: index,
@@ -473,7 +472,8 @@ impl<'a, 'b> PostReader<'a, 'b> {
     fn next(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let delta = self.d.read_unsigned_varint_32().unwrap();
+            let (delta, n) = index::read_uvarint(self.d).unwrap();
+            self.d = self.d.split_at(n as usize).1;
             self.fileid += delta as i64;
             let mut is_fileid_found = true;
             if let Some(ref mut r) = *self.restrict {
