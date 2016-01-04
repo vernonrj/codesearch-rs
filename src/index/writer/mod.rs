@@ -8,6 +8,10 @@ mod write;
 mod error;
 mod sparseset;
 
+mod postentry;
+mod postheap;
+
+const NPOST: usize = (64 << 20) / 8;
 
 pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
     seekable.seek(SeekFrom::Current(0))

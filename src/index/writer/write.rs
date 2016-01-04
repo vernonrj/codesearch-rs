@@ -4,26 +4,26 @@
 // license that can be found in the LICENSE file.
 
 #![allow(dead_code)]
-use std::vec;
 use std::fs::File;
 use std::path::Path;
-use std::io::{self, Cursor, Seek, SeekFrom, Read, BufReader, BufWriter, Write};
+use std::io::{self, Seek, SeekFrom, Read, BufReader, BufWriter, Write};
 use std::ffi::OsString;
 use std::ops::Deref;
-use std::{u32, u64};
+use std::u32;
 use std::mem;
-use std::iter::Peekable;
 
 use index::varint;
 use index::tempfile::{TempFile, NamedTempFile};
-use index::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use index::memmap::{Mmap, Protection};
+use index::byteorder::{BigEndian, WriteBytesExt};
 
 use index::{MAGIC, TRAILER_MAGIC};
 
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
 use super::{copy_file, get_offset};
+use super::postentry::PostEntry;
+use super::postheap::PostHeap;
+use super::NPOST;
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -45,7 +45,6 @@ const MAX_FILE_LEN: u64 = 1 << 30;
 const MAX_LINE_LEN: u64 = 2000;
 const MAX_TEXT_TRIGRAMS: usize = 30000;
 const MAX_INVALID_UTF8_RATION: f64 = 0.1;
-const NPOST: usize = (64 << 20) / 8;
 
 
 pub struct IndexWriter {
@@ -249,27 +248,6 @@ impl IndexWriter {
 }
 
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-struct PostEntry(u64);
-
-impl PostEntry {
-    pub fn new(trigram: u32, file_id: u32) -> Self {
-        PostEntry((trigram as u64) << 32 | (file_id as u64))
-    }
-    pub fn trigram(&self) -> u32 {
-        let &PostEntry(ref u) = self;
-        return (u >> 32) as u32;
-    }
-    pub fn file_id(&self) -> u32 {
-        let &PostEntry(ref u) = self;
-        return (u & 0xffffffff) as u32;
-    }
-    pub fn value(&self) -> u64 {
-        let &PostEntry(v) = self;
-        v
-    }
-}
-
 struct TrigramIter<R: Read> {
     reader: io::Bytes<BufReader<R>>,
     current_value: u32,
@@ -357,85 +335,6 @@ impl<R: Read> Iterator for TrigramIter<R> {
 
 
 
-struct PostHeap {
-    ch: Vec<Peekable<vec::IntoIter<PostEntry>>>
-}
-
-impl PostHeap {
-    pub fn new() -> PostHeap {
-        PostHeap {
-            ch: Vec::new()
-        }
-    }
-    pub fn len(&self) -> usize { self.ch.len() }
-    pub fn is_empty(&self) -> bool { self.ch.is_empty() }
-    pub fn add_file(&mut self, f: &File) -> io::Result<()> {
-        let m = try!(Mmap::open(f, Protection::Read));
-        let mut bytes = Cursor::new(unsafe { m.as_slice() });
-        let mut ch = Vec::with_capacity(NPOST);
-        while let Ok(p) = bytes.read_u64::<BigEndian>() {
-            ch.push(PostEntry(p));
-        }
-        self.ch.push(ch.into_iter().peekable());
-        Ok(())
-    }
-    pub fn add_mem(&mut self, v: Vec<PostEntry>) {
-        self.ch.push(v.into_iter().peekable());
-    }
-}
-
-impl IntoIterator for PostHeap {
-    type Item = PostEntry;
-    type IntoIter = PostHeapIntoIter;
-    fn into_iter(self) -> Self::IntoIter {
-        PostHeapIntoIter {
-            inner: self
-        }
-    }
-}
-
-struct PostHeapIntoIter {
-    inner: PostHeap
-}
-
-impl PostHeapIntoIter {
-    pub fn new(inner: PostHeap) -> Self {
-        PostHeapIntoIter {
-            inner: inner
-        }
-    }
-}
-
-impl Iterator for PostHeapIntoIter {
-    type Item = PostEntry;
-    fn next(&mut self) -> Option<Self::Item> {
-        let min_idx = if self.inner.ch.is_empty() {
-            return None;
-        } else if self.inner.ch.len() == 1 {
-            0
-        } else {
-            let mut min_idx = 0;
-            let mut min_val = PostEntry(u64::MAX);
-            for (each_idx, each_vec) in self.inner.ch.iter_mut().enumerate() {
-                let each_val = if let Some(each_val) = each_vec.peek() {
-                    each_val
-                } else {
-                    continue;
-                };
-                if *each_val < min_val {
-                    min_val = *each_val;
-                    min_idx = each_idx;
-                }
-            }
-            min_idx
-        };
-        let min_val = self.inner.ch[min_idx].next().unwrap();
-        if self.inner.ch[min_idx].peek().is_none() {
-            self.inner.ch.remove(min_idx).last();
-        }
-        Some(min_val)
-    }
-}
 
 
 fn valid_utf8(c1: u8, c2: u8) -> bool {
