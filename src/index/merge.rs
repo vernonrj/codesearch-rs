@@ -33,7 +33,7 @@
 
 use index::varint;
 use index::reader::read::{Index, POST_ENTRY_SIZE};
-use index::writer::{get_offset, copy_file, write_trigram};
+use index::writer::{get_offset, copy_file};
 use index;
 
 use index::tempfile::TempFile;
@@ -42,6 +42,17 @@ use index::byteorder::{BigEndian, WriteBytesExt};
 use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter};
 use std::u32;
 use std::fs::File;
+
+trait WriteTrigram: Write {
+    fn write_trigram(&mut self, t: u32) -> io::Result<()> {
+        let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
+                                ((t >> 8) & 0xff) as u8,
+                                (t & 0xff) as u8];
+        self.write_all(&mut buf)
+    }
+}
+
+impl<W: Write + ?Sized> WriteTrigram for W {}
 
 #[derive(Debug)]
 pub struct IdRange {
@@ -165,7 +176,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
     }
     pub fn file_id(&mut self, id: u32) {
         if self.count == 0 {
-            write_trigram(&mut self.out, self.t).unwrap();
+            self.out.write_trigram(self.t).unwrap();
         }
         varint::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
@@ -176,7 +187,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
             return;
         }
         varint::write_uvarint(&mut self.out, 0).unwrap();
-        write_trigram(&mut self.post_index_file, self.t).unwrap();
+        self.post_index_file.write_trigram(self.t).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.count).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.offset - self.base).unwrap();
     }

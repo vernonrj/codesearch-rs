@@ -35,9 +35,3 @@ pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R)
     }
 }
 
-pub fn write_trigram<W: Write>(writer: &mut W, t: u32) -> io::Result<usize> {
-    let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
-                            ((t >> 8) & 0xff) as u8,
-                            (t & 0xff) as u8];
-    writer.write(&mut buf)
-}
