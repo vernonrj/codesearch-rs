@@ -41,8 +41,8 @@ use index::sparseset::SparseSet;
 // But we have not implemented that.
 
 const MAX_FILE_LEN: u64 = 1 << 30;
-const MAX_LINE_LEN: usize = 2000;
-const MAX_TEXT_TRIGRAMS: usize = 20000;
+const MAX_LINE_LEN: u64 = 2000;
+const MAX_TEXT_TRIGRAMS: usize = 30000;
 const MAX_INVALID_UTF8_RATION: f64 = 0.1;
 const NPOST: usize = (64 << 20) / 8;
 
@@ -56,6 +56,7 @@ pub struct IndexError {
 pub enum IndexErrorKind {
     IoError,
     FileTooLong,
+    LineTooLong,
     TooManyTrigrams,
     BinaryDataPresent,
     HighInvalidUtf8Ratio
@@ -90,8 +91,9 @@ impl error::Error for IndexError {
         match self.kind {
             IndexErrorKind::IoError => self.error.description(),
             IndexErrorKind::FileTooLong => "file too long",
+            IndexErrorKind::LineTooLong => "line too long",
             IndexErrorKind::TooManyTrigrams => "too many trigrams in file",
-            IndexErrorKind::BinaryDataPresent => "binary data present in file",
+            IndexErrorKind::BinaryDataPresent => "binary file",
             IndexErrorKind::HighInvalidUtf8Ratio => "Too many invalid utf-8 sequences"
         }
     }
@@ -156,7 +158,8 @@ impl IndexWriter {
         if size > MAX_FILE_LEN {
             // writeln!(&mut io::stderr(), "{}: file too long, ignoring", filename);
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
-                                       "file too long, ignoring"));
+                                       format!("too long, ignoring ({} > {})",
+                                               size, MAX_FILE_LEN)));
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
@@ -166,7 +169,9 @@ impl IndexWriter {
         // TODO: add invalid trigram count checking
         if self.trigram.len() > MAX_TEXT_TRIGRAMS {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
-                                       "Too many trigrams, ignoring"));
+                                       format!("Too many trigrams ({} > {})",
+                                               self.trigram.len(), MAX_TEXT_TRIGRAMS)));
+
         }
         debug!("{} {} {:?}", size, self.trigram.len(), filename);
         self.bytes_written += size as usize;
@@ -276,6 +281,7 @@ impl IndexWriter {
     fn flush_post(&mut self) -> io::Result<()> {
         self.post.sort();
         let mut f = BufWriter::with_capacity(NPOST, try!(NamedTempFile::new()));
+        debug!("flush {} entries to tempfile", self.post.len());
         for each in &self.post {
             try!(f.write_u64::<BigEndian>(each.value()));
         }
@@ -356,7 +362,8 @@ struct TrigramIter<R: Read> {
     current_value: u32,
     num_read: usize,
     inv_cnt: u64,
-    max_invalid: u64
+    max_invalid: u64,
+    line_len: u64
 }
 
 impl<R: Read> TrigramIter<R> {
@@ -366,7 +373,8 @@ impl<R: Read> TrigramIter<R> {
             current_value: 0,
             num_read: 0,
             inv_cnt: 0,
-            max_invalid: max_invalid
+            max_invalid: max_invalid,
+            line_len: 0
         }
     }
     fn next_char(&mut self) -> io::Result<Option<u8>> {
@@ -405,17 +413,29 @@ impl<R: Read> Iterator for TrigramIter<R> {
             if b1 == 0x00 || b2 == 0x00 {
                 // Binary file. Skip
                 Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
-                                         "Binary data found in file")))
+                                         format!("Binary File. Bytes {:02x}{:02x} at offset {}",
+                                                 b1, b2, self.num_read))))
             } else if !valid_utf8(b1 as u8, b2 as u8) {
                 // invalid utf8 data
                 self.inv_cnt += 1;
                 if self.inv_cnt > self.max_invalid {
                     Some(Err(IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
-                                             "Too many invalid utf-8 sequences")))
+                                             format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
+                                                     self.num_read, self.inv_cnt,
+                                                     (self.inv_cnt as f64) / (self.num_read as f64)
+                                                     ))))
                 } else {
                     return self.next();
                 }
+            } else if self.line_len > MAX_LINE_LEN {
+                Some(Err(IndexError::new(IndexErrorKind::LineTooLong,
+                                         format!("Very long lines ({})", self.line_len))))
             } else {
+                if c == ('\n' as u8) { 
+                    self.line_len = 0;
+                } else {
+                    self.line_len += 1;
+                }
                 Some(Ok(self.current_value))
             }
         }

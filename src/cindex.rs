@@ -129,6 +129,9 @@ With no path arguments, cindex -reset removes the index.")
     .arg(clap::Arg::with_name("verbose")
          .long("verbose")
          .help("print extra information"))
+    .arg(clap::Arg::with_name("logskip")
+         .long("logskip")
+         .help("print why a file was skipped from indexing"))
     .get_matches();
 
     let max_log_level = if matches.is_present("verbose") {
@@ -206,6 +209,7 @@ With no path arguments, cindex -reset removes the index.")
     // copying these variables into the worker thread
     let index_path_cloned = index_path.clone();
     let paths_cloned = paths.clone();
+    let log_skipped = matches.is_present("logskip");
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
         let mut i = index::write::IndexWriter::new(index_path_cloned);
@@ -215,20 +219,11 @@ With no path arguments, cindex -reset removes the index.")
                 match i.add_file(&f) {
                     Ok(_) => (),
                     Err(ref e) if e.kind() == IndexErrorKind::IoError => panic!("IOError"),
-                    Err(ref e) if e.kind() == IndexErrorKind::BinaryDataPresent => {
-                        // TODO: log this later
+                    Err(ref e) => {
+                        if log_skipped {
+                            warn!("{:?}: skipped. {}", f, e);
+                        }
                         ()
-                    },
-                    Err(ref e) if e.kind() == IndexErrorKind::HighInvalidUtf8Ratio => {
-                        // TODO: log this later
-                        ()
-                    },
-                    Err(ref e) if e.kind() == IndexErrorKind::TooManyTrigrams => {
-                        // TODO: log this later
-                        ()
-                    },
-                    Err(e) => {
-                        writeln!(&mut io::stderr(), "err with file: {}", e).unwrap();
                     }
                 }
                 seen.insert(f);
