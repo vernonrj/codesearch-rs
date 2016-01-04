@@ -139,14 +139,12 @@ empty, $HOME/.csearchindex.
     let mut total_matches = 0;
     'files: for file_id in post {
         let name = i.name(file_id);
-        let maybe_g_it = g.open(name.clone());
-        let g_it = if let Ok(g_it) = maybe_g_it {
-            g_it
-        } else if let Err(cause) = maybe_g_it {
-            writeln!(&mut std::io::stderr(), "File open failure: {}", cause).unwrap();
-            continue;
-        } else {
-            panic!("Ok, Err have been covered, but result is neither!");
+        let g_it = match g.open(name.clone()) {
+            Ok(g_it) => g_it,
+            Err(cause) => {
+                warn!("File open failure: {}", cause);
+                continue;
+            }
         };
         for each_line in g_it {
             total_matches += 1;
