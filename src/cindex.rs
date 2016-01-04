@@ -217,12 +217,16 @@ With no path arguments, cindex -reset removes the index.")
             if !seen.contains(&f) {
                 match i.add_file(&f) {
                     Ok(_) => (),
-                    Err(ref e) if e.kind() == IndexErrorKind::IoError => panic!("IOError"),
                     Err(ref e) => {
-                        if log_skipped {
-                            warn!("{:?}: skipped. {}", f, e);
+                        match e.kind() {
+                            IndexErrorKind::IoError(_) => panic!("I/O Error"),
+                            _ => {
+                                if log_skipped {
+                                    warn!("{:?}: skipped. {}", f, e);
+                                }
+                                ()
+                            }
                         }
-                        ()
                     }
                 }
                 seen.insert(f);

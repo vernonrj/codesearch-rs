@@ -10,7 +10,7 @@ pub struct IndexError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexErrorKind {
-    IoError,
+    IoError(io::ErrorKind),
     FileTooLong,
     LineTooLong,
     TooManyTrigrams,
@@ -36,8 +36,19 @@ impl IndexError {
 impl From<io::Error> for IndexError {
     fn from(e: io::Error) -> Self {
         IndexError {
-            kind: IndexErrorKind::IoError,
+            kind: IndexErrorKind::IoError(e.kind()),
             error: Box::new(e)
+        }
+    }
+}
+
+impl From<IndexError> for io::Error {
+    fn from(e: IndexError) -> Self {
+        match e.kind() {
+            IndexErrorKind::IoError(ekind) => {
+                io::Error::new(ekind, e)
+            },
+            _ => io::Error::new(io::ErrorKind::Other, e)
         }
     }
 }
@@ -45,7 +56,7 @@ impl From<io::Error> for IndexError {
 impl error::Error for IndexError {
     fn description(&self) -> &str {
         match self.kind {
-            IndexErrorKind::IoError => self.error.description(),
+            IndexErrorKind::IoError(_) => self.error.description(),
             IndexErrorKind::FileTooLong => "file too long",
             IndexErrorKind::LineTooLong => "line too long",
             IndexErrorKind::TooManyTrigrams => "too many trigrams in file",
