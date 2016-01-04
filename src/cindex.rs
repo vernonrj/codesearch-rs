@@ -9,12 +9,11 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-extern crate codesearch_lib;
-
 mod customlogger;
+mod index;
 
-use codesearch_lib::index;
-use codesearch_lib::index::write::IndexErrorKind;
+use index::read::Index;
+use index::write::IndexErrorKind;
 use log::LogLevelFilter;
 
 use std::collections::HashSet;

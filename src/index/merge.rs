@@ -35,8 +35,8 @@ use index::read::{Index, POST_ENTRY_SIZE};
 use index::write::{get_offset, copy_file, IndexWriter};
 use index;
 
-use tempfile::TempFile;
-use byteorder::{BigEndian, WriteBytesExt};
+use index::tempfile::TempFile;
+use index::byteorder::{BigEndian, WriteBytesExt};
 
 use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter};
 use std::u32;

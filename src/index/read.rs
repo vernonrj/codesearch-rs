@@ -67,11 +67,11 @@ use std::path::Path;
 use std::io;
 use std::fmt;
 use std::fmt::Debug;
-
-use memmap::{Mmap, Protection};
 use std::io::Cursor;
-use byteorder::{BigEndian, ReadBytesExt};
-use varint::VarintRead;
+
+use index::memmap::{Mmap, Protection};
+use index::byteorder::{BigEndian, ReadBytesExt};
+use index::varint::VarintRead;
 
 use index::regexp::{Query, QueryOperation};
 use index::search;

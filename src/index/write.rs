@@ -17,9 +17,9 @@ use std::{u32, u64};
 use std::mem;
 use std::iter::Peekable;
 
-use tempfile::{TempFile, NamedTempFile};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use memmap::{Mmap, Protection};
+use index::tempfile::{TempFile, NamedTempFile};
+use index::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use index::memmap::{Mmap, Protection};
 
 use index;
 use index::sparseset::SparseSet;

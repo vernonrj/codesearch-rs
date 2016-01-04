@@ -7,16 +7,14 @@
 #[macro_use]
 extern crate clap;
 extern crate chrono;
+#[macro_use]
 extern crate log;
 extern crate regex;
 extern crate regex_syntax;
 
-extern crate codesearch_lib;
-
 mod customlogger;
-
-use codesearch_lib::index;
-use codesearch_lib::grep;
+mod index;
+mod grep;
 
 use std::io::Write;
 use std::collections::HashMap;

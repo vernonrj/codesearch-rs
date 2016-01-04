@@ -13,13 +13,17 @@ debug = false
 debug-assertions = false
 
 [dependencies]
+byteorder = "0.4.2"
 chrono = "0.2"
 clap = "1.5.4"
+memmap = "0.2.3"
 regex = "0.1.44"
 regex-syntax = "0.2.2"
 log = "0.3.4"
+num = "0.1.29"
+tempfile = "1.1.3"
+varint = "0.9.0"
 
-codesearch_lib = { path = "codesearch_lib" }
 
 
 [[bin]]

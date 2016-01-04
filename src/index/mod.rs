@@ -1,9 +1,18 @@
+#![allow(dead_code)]
+extern crate tempfile;
+extern crate byteorder;
+extern crate num;
+extern crate memmap;
+extern crate regex;
+extern crate regex_syntax;
+extern crate varint;
+
 pub mod read;
 pub mod write;
-pub mod regexp;
 pub mod merge;
-mod search;
+pub mod regexp;
 mod sparseset;
+mod search;
 
 use std::env;
 
@@ -38,3 +47,4 @@ pub fn read_uvarint(b: &[u8]) -> Result<(u64, u64), u64> {
     }
     Err(0)
 }
+
