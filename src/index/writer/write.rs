@@ -17,6 +17,7 @@ use std::{u32, u64};
 use std::mem;
 use std::iter::Peekable;
 
+use index::varint;
 use index::tempfile::{TempFile, NamedTempFile};
 use index::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use index::memmap::{Mmap, Protection};
@@ -261,12 +262,12 @@ impl IndexWriter {
             self.index.write(&mut buf).unwrap();
             while e.trigram() == trigram && (trigram != (1<<24)-1) {
                 let fdiff = e.file_id().wrapping_sub(file_id);
-                IndexWriter::write_uvarint(&mut self.index, fdiff).unwrap();
+                varint::write_uvarint(&mut self.index, fdiff).unwrap();
                 file_id = e.file_id();
                 nfile += 1;
                 e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
             }
-            IndexWriter::write_uvarint(&mut self.index, 0).unwrap();
+            varint::write_uvarint(&mut self.index, 0).unwrap();
 
             self.post_index.write(&mut buf).unwrap();
             Self::write_u32(&mut self.post_index, nfile).unwrap();
@@ -305,29 +306,6 @@ impl IndexWriter {
                                 ((u >> 8) & 0xff) as u8,
                                 (u & 0xff) as u8];
         writer.write(&mut buf)
-    }
-    pub fn write_uvarint<W: Write>(writer: &mut W, x: u32) -> io::Result<usize> {
-        if x < (1<<7) {
-            writer.write(&mut [x as u8])
-        } else if x < (1<<14) {
-            writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                               ((x >> 7) & 0xff) as u8])
-        } else if x < (1<<21) {
-            writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                               ((x >> 7) & 0xff) as u8,
-                               ((x >> 14) & 0xff) as u8])
-        } else if x < (1<<28) {
-            writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                               ((x >> 7) & 0xff) as u8,
-                               ((x >> 14) & 0xff) as u8,
-                               ((x >> 21) & 0xff) as u8])
-        } else {
-            writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                               ((x >> 7) & 0xff) as u8,
-                               ((x >> 14) & 0xff) as u8,
-                               ((x >> 21) & 0xff) as u8,
-                               ((x >> 21) & 0xff) as u8])
-        }
     }
 }
 

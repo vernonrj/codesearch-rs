@@ -31,6 +31,7 @@
 // Copy the name index and posting list index into C's index and write the trailer.
 // Rename C's index onto the new index.
 
+use index::varint;
 use index::read::{Index, POST_ENTRY_SIZE};
 use index::write::{get_offset, copy_file, IndexWriter};
 use index;
@@ -111,7 +112,7 @@ impl<'a> PostMapReader<'a> {
     pub fn next_id(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let (delta, n) = index::read_uvarint(self.d).unwrap();
+            let (delta, n) = varint::read_uvarint(self.d).unwrap();
             self.d = self.d.split_at(n as usize).1;
             self.old_id = self.old_id.wrapping_add(delta as u32);
             while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {
@@ -166,7 +167,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             IndexWriter::write_trigram(&mut self.out, self.t).unwrap();
         }
-        IndexWriter::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
+        varint::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
         self.count += 1;
     }
@@ -174,7 +175,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             return;
         }
-        IndexWriter::write_uvarint(&mut self.out, 0).unwrap();
+        varint::write_uvarint(&mut self.out, 0).unwrap();
         IndexWriter::write_trigram(&mut self.post_index_file, self.t).unwrap();
         IndexWriter::write_u32(&mut self.post_index_file, self.count).unwrap();
         IndexWriter::write_u32(&mut self.post_index_file, self.offset - self.base).unwrap();

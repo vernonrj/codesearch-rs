@@ -69,14 +69,14 @@ use std::fmt;
 use std::fmt::Debug;
 use std::io::Cursor;
 
-use index;
+use index::varint;
+use index::TRAILER_MAGIC;
 use index::memmap::{Mmap, Protection};
 use index::byteorder::{BigEndian, ReadBytesExt};
 
 use index::regexp::{Query, QueryOperation};
 use super::search;
 
-static TRAILER_MAGIC: &'static str = "\ncsearch trailr\n";
 pub const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
 
 /// Simple alias for an ID representing a filename in the Index.
@@ -472,7 +472,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     fn next(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let (delta, n) = index::read_uvarint(self.d).unwrap();
+            let (delta, n) = varint::read_uvarint(self.d).unwrap();
             self.d = self.d.split_at(n as usize).1;
             self.fileid += delta as i64;
             let mut is_fileid_found = true;

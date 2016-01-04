@@ -22,7 +22,6 @@ regex-syntax = "0.2.2"
 log = "0.3.4"
 num = "0.1.29"
 tempfile = "1.1.3"
-varint = "0.9.0"
 
 
 
