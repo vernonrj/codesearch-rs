@@ -26,6 +26,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::sync::mpsc;
 use std::ffi::OsString;
+use std::str::FromStr;
 
 fn walk_dir(dir: &Path, cb: &Fn(&DirEntry)) -> io::Result<()> {
     if try!(fs::metadata(dir)).is_dir() {
@@ -51,6 +52,19 @@ fn is_regular_file(meta: FileType) -> bool {
     !meta.is_dir() && !meta.is_symlink()
         && !meta.is_fifo() && !meta.is_socket()
         && !meta.is_block_device() && !meta.is_char_device()
+}
+
+fn get_value_from_matches<F: FromStr>(matches: &clap::ArgMatches, name: &str) -> Option<F> {
+    match matches.value_of(name) {
+        Some(s) => {
+            if let Ok(t) = s.parse::<F>() {
+                Some(t)
+            } else {
+                panic!("can't convert value '{}' to number", s);
+            }
+        },
+        _ => None
+    }
 }
 
 fn main() {
@@ -212,6 +226,18 @@ With no path arguments, cindex -reset removes the index.")
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
         let mut i = IndexWriter::new(index_path_cloned);
+        if let Some(t) = get_value_from_matches::<u64>(&matches, "MAX_TRIGRAMS_COUNT") {
+            i.max_trigram_count = t;
+        }
+        if let Some(u) = get_value_from_matches::<f64>(&matches, "MAX_INVALID_UTF8_RATIO") {
+            i.max_utf8_invalid = u;
+        }
+        if let Some(s) = get_value_from_matches::<u64>(&matches, "MAX_FILE_SIZE_BYTES") {
+            i.max_file_len = s;
+        }
+        if let Some(b) = get_value_from_matches::<u64>(&matches, "MAX_LINE_LEN_BYTES") {
+            i.max_line_len = b;
+        }
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
         while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {

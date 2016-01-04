@@ -43,11 +43,17 @@ use super::NPOST;
 // But we have not implemented that.
 
 const MAX_FILE_LEN: u64 = 1 << 30;
-const MAX_TEXT_TRIGRAMS: usize = 30000;
+const MAX_TEXT_TRIGRAMS: u64 = 30000;
 const MAX_INVALID_UTF8_RATION: f64 = 0.1;
+const MAX_LINE_LEN: u64 = 2000;
 
 
 pub struct IndexWriter {
+    pub max_trigram_count: u64,
+    pub max_utf8_invalid: f64,
+    pub max_file_len: u64,
+    pub max_line_len: u64,
+
     paths: Vec<OsString>,
 
     name_data: BufWriter<TempFile>,
@@ -69,6 +75,10 @@ impl IndexWriter {
     pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
         let f = File::create(filename).expect("failed to make index!");
         IndexWriter {
+            max_trigram_count: MAX_TEXT_TRIGRAMS,
+            max_utf8_invalid: MAX_INVALID_UTF8_RATION,
+            max_file_len: MAX_FILE_LEN,
+            max_line_len: MAX_LINE_LEN,
             paths: Vec::new(),
             name_data: make_temp_buf(),
             name_index: make_temp_buf(),
@@ -90,22 +100,20 @@ impl IndexWriter {
         self.add(filename, f, metadata.len())
     }
     fn add(&mut self, filename: &OsString, f: File, size: u64) -> IndexResult<()> {
-        if size > MAX_FILE_LEN {
-            // writeln!(&mut io::stderr(), "{}: file too long, ignoring", filename);
+        if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
-                                       format!("too long, ignoring ({} > {})",
-                                               size, MAX_FILE_LEN)));
+                                       format!("file too long, ignoring ({} > {})",
+                                               size, self.max_file_len)));
         }
         self.trigram.clear();
-        let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        for each_trigram in TrigramIter::new(f, max_utf8_invalid) {
+        let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
+        for each_trigram in TrigramIter::new(f, max_utf8_invalid, self.max_line_len) {
             self.trigram.insert(try!(each_trigram));
         }
-        // TODO: add invalid trigram count checking
-        if self.trigram.len() > MAX_TEXT_TRIGRAMS {
+        if (self.trigram.len() as u64) > self.max_trigram_count {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
                                        format!("Too many trigrams ({} > {})",
-                                               self.trigram.len(), MAX_TEXT_TRIGRAMS)));
+                                               self.trigram.len(), self.max_trigram_count)));
 
         }
         debug!("{} {} {:?}", size, self.trigram.len(), filename);

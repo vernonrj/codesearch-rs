@@ -2,26 +2,26 @@ use std::io::{self, BufReader, Read};
 
 use super::error::{IndexResult, IndexError, IndexErrorKind};
 
-const MAX_LINE_LEN: u64 = 2000;
-
 pub struct TrigramIter<R: Read> {
     reader: io::Bytes<BufReader<R>>,
     current_value: u32,
     num_read: usize,
     inv_cnt: u64,
     max_invalid: u64,
-    line_len: u64
+    line_len: u64,
+    max_line_len: u64
 }
 
 impl<R: Read> TrigramIter<R> {
-    pub fn new(r: R, max_invalid: u64) -> TrigramIter<R> {
+    pub fn new(r: R, max_invalid: u64, max_line_len: u64) -> TrigramIter<R> {
         TrigramIter {
             reader: BufReader::with_capacity(16384, r).bytes(),
             current_value: 0,
             num_read: 0,
             inv_cnt: 0,
             max_invalid: max_invalid,
-            line_len: 0
+            line_len: 0,
+            max_line_len: max_line_len
         }
     }
     fn next_char(&mut self) -> io::Result<Option<u8>> {
@@ -74,9 +74,10 @@ impl<R: Read> Iterator for TrigramIter<R> {
                 } else {
                     return self.next();
                 }
-            } else if self.line_len > MAX_LINE_LEN {
+            } else if self.line_len > self.max_line_len {
                 Some(Err(IndexError::new(IndexErrorKind::LineTooLong,
-                                         format!("Very long lines ({})", self.line_len))))
+                                         format!("Line too long ({} > {})",
+                                                 self.line_len, self.max_line_len))))
             } else {
                 if c == ('\n' as u8) { 
                     self.line_len = 0;
@@ -106,7 +107,7 @@ fn valid_utf8(c1: u8, c2: u8) -> bool {
 
 #[test]
 fn test_trigram_iter_once() {
-    let c = TrigramIter::new("hello".as_bytes(), 0).next().unwrap();
+    let c = TrigramIter::new("hello".as_bytes(), 0, 100).next().unwrap();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
@@ -115,7 +116,7 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0)
+    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0, 100)
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
