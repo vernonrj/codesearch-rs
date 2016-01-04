@@ -212,7 +212,11 @@ With no path arguments, cindex -reset removes the index.")
                     Err(ref e) if e.kind() == IndexErrorKind::HighInvalidUtf8Ratio => {
                         // TODO: log this later
                         ()
-                    }
+                    },
+                    Err(ref e) if e.kind() == IndexErrorKind::TooManyTrigrams => {
+                        // TODO: log this later
+                        ()
+                    },
                     Err(e) => {
                         writeln!(&mut io::stderr(), "err with file: {}", e).unwrap();
                     }

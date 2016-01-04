@@ -6,8 +6,9 @@
 #![allow(dead_code)]
 use std::collections::BinaryHeap;
 use std::fs::File;
+use std::path::Path;
 use std::io::{self, Cursor, Seek, SeekFrom, Read, BufRead, BufReader, BufWriter, Write};
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::ffi::OsString;
 use std::error;
 use std::fmt;
@@ -120,8 +121,6 @@ pub struct IndexWriter {
     post_files: Vec<NamedTempFile>,
     post_index: BufWriter<TempFile>,
 
-    trigram_reader: TrigramReader,
-
     index: BufWriter<File>
 }
 
@@ -130,8 +129,7 @@ impl IndexWriter {
         let w = TempFile::new().expect("failed to make tempfile!");
         BufWriter::with_capacity(256 << 10, w)
     }
-    // TODO: use Path
-    pub fn new(filename: String) -> IndexWriter {
+    pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
         let f = File::create(filename).expect("failed to make index!");
         IndexWriter {
             buf: [0; 8],
@@ -144,7 +142,6 @@ impl IndexWriter {
             post: Vec::with_capacity(NPOST),
             post_files: Vec::new(),
             post_index: Self::make_temp_buf(),
-            trigram_reader: TrigramReader::new(),
             index: BufWriter::with_capacity(256 << 10, f)
         }
     }
@@ -164,7 +161,7 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * MAX_INVALID_UTF8_RATION) as u64;
-        for each_trigram in self.trigram_reader.open(f, max_utf8_invalid) {
+        for each_trigram in TrigramIter::new(f, max_utf8_invalid) {
             self.trigram.insert(try!(each_trigram));
         }
         // TODO: add invalid trigram count checking
@@ -352,122 +349,37 @@ impl PostEntry {
     }
 }
 
-const RING_BUF_SIZE: usize = 16384;
-
-struct RingBuffer {
-    buf: [u8; RING_BUF_SIZE],
-    read_index: usize,
-    write_index: usize,
-    num_bytes: usize
-}
-
-impl RingBuffer {
-    pub fn new() -> RingBuffer {
-        RingBuffer {
-            buf: [0; RING_BUF_SIZE],
-            read_index: 0,
-            write_index: 0,
-            num_bytes: 0
-        }
-    }
-    pub fn clear(&mut self) {
-        self.read_index = 0;
-        self.write_index = 0;
-        self.num_bytes = 0;
-    }
-    pub fn with_buf_mut<F>(&mut self, f: F) -> io::Result<usize>
-        where F: FnOnce(&mut [u8]) -> io::Result<usize>
-    {
-        if self.len() > 0 {
-            panic!("not all data has been consumed from RingBuffer");
-        }
-        let new_size = try!(f(&mut self.buf));
-        self.read_index = 0;
-        self.write_index = new_size;
-        self.num_bytes = new_size;
-        Ok(new_size)
-    }
-    pub fn len(&self) -> usize {
-        self.num_bytes
-    }
-    pub fn capacity() -> usize {
-        RING_BUF_SIZE
-    }
-    pub fn is_full(&self) -> bool { self.len() >= Self::capacity() }
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
-    pub fn push(&mut self, value: u8) -> Option<()> {
-        if self.is_full() {
-            None
-        } else {
-            self.buf[self.write_index] = value;
-            self.write_index += 1;
-            self.num_bytes += 1;
-            if self.write_index >= Self::capacity() {
-                self.write_index -= Self::capacity();
-            }
-            Some(())
-        }
-    }
-    pub fn read(&mut self) -> Option<u8> {
-        if self.is_empty() {
-            None
-        } else {
-            let value = self.buf[self.read_index];
-            self.read_index += 1;
-            self.num_bytes -= 1;
-            if self.read_index >= Self::capacity() {
-                self.read_index -= Self::capacity();
-            }
-            Some(value)
-        }
-    }
-}
-
-struct TrigramIter<'a, R: Read> {
-    reader: R,
-    buffer: &'a mut RingBuffer,
+struct TrigramIter<R: Read> {
+    reader: io::Bytes<BufReader<R>>,
     current_value: u32,
     num_read: usize,
     inv_cnt: u64,
     max_invalid: u64
 }
 
-impl<'a, R: Read> TrigramIter<'a, R> {
-    fn new(r: R, max_invalid: u64, buffer: &'a mut RingBuffer) -> TrigramIter<'a, R> {
-        buffer.clear();
+impl<R: Read> TrigramIter<R> {
+    fn new(r: R, max_invalid: u64) -> TrigramIter<R> {
         TrigramIter {
-            reader: r,
-            buffer: buffer,
+            reader: BufReader::with_capacity(16384, r).bytes(),
             current_value: 0,
             num_read: 0,
             inv_cnt: 0,
             max_invalid: max_invalid
         }
     }
-    fn read_into_buf(&mut self) -> io::Result<usize> {
-        let reader = &mut self.reader;
-        self.buffer.with_buf_mut(|mut b| reader.read(&mut b))
-    }
     fn next_char(&mut self) -> io::Result<Option<u8>> {
-        if self.buffer.is_empty() {
-            loop {
-                match self.read_into_buf() {
-                    Ok(0) => return Ok(None),      // no more bytes to read
-                    Ok(_) => break,
-                    Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                    Err(e) => {
-                        writeln!(&mut io::stderr(), "failed to read from file. {}", e).unwrap();
-                        return Err(e)
-                    }
-                }
-            }
+        match self.reader.next() {
+            Some(Err(e)) => Err(e),
+            Some(Ok(n)) => {
+                self.num_read += 1;
+                Ok(Some(n))
+            },
+            None => Ok(None)
         }
-        self.num_read += 1;
-        Ok(self.buffer.read())
     }
 }
 
-impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
+impl<R: Read> Iterator for TrigramIter<R> {
     type Item = IndexResult<u32>;
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
@@ -505,21 +417,6 @@ impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
                 Some(Ok(self.current_value))
             }
         }
-    }
-}
-
-struct TrigramReader {
-    buffer: RingBuffer,
-}
-
-impl TrigramReader {
-    pub fn new() -> TrigramReader {
-        TrigramReader {
-            buffer: RingBuffer::new()
-        }
-    }
-    pub fn open<'a, R: Read>(&'a mut self, r: R, max_invalid: u64) -> TrigramIter<'a, R> {
-        TrigramIter::new(r, max_invalid, &mut self.buffer)
     }
 }
 
@@ -591,64 +488,8 @@ fn valid_utf8(c1: u8, c2: u8) -> bool {
 }
 
 #[test]
-fn test_ringbuffer_init_zero() {
-    let r = RingBuffer::new();
-    assert!(r.len() == 0);
-    assert!(r.is_empty());
-}
-
-#[test]
-fn test_ringbuffer_push() {
-    let mut r = RingBuffer::new();
-    assert!(r.push(1).is_some());
-    assert!(r.len() == 1);
-    assert!(r.push(5).is_some());
-    assert!(r.len() == 2);
-    let mut counter = 0;
-    while r.len() < RingBuffer::capacity() && counter < 10 {
-        assert!(r.push(10).is_some());
-        counter += 1;
-    }
-    if counter >= 10 {
-        panic!("push isn't incrementing correctly (len == {})!", r.len());
-    }
-    assert!(r.is_full());
-    assert!(r.len() == RingBuffer::capacity());
-    assert!(r.push(5).is_none());
-}
-
-#[test]
-fn test_ringbuffer_pop() {
-    let mut r = RingBuffer::new();
-    assert!(r.push(1).is_some());
-    assert!(r.read() == Some(1));
-    assert!(r.len() == 0);
-    assert!(r.is_empty());
-    assert!(r.read() == None);
-}
-
-#[test]
-fn test_ringbuffer_read() {
-    let mut r = RingBuffer::new();
-    let rslt = r.with_buf_mut(|mut b| {
-        b[0] = 1;
-        b[1] = 2;
-        b[2] = 3;
-        Ok(3)
-    });
-    assert!(rslt.is_ok());
-    assert!(rslt.unwrap() == 3);
-    assert!(r.len() == 3);
-    assert!(r.read() == Some(1));
-    assert!(r.read() == Some(2));
-    assert!(r.read() == Some(3));
-    assert!(r.read() == None);
-    assert!(r.is_empty());
-}
-
-#[test]
 fn test_trigram_iter_once() {
-    let c = TrigramReader::new(0).open("hello".as_bytes()).next().unwrap();
+    let c = TrigramIter::new("hello".as_bytes(), 0).next().unwrap();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
@@ -657,7 +498,7 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramReader::new(0).open("hello".as_bytes())
+    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), )
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
