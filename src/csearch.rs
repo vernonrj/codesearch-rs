@@ -33,7 +33,7 @@ pub struct MatchOptions {
 }
 
 fn main() {
-    customlogger::init().unwrap();
+    customlogger::init(log::LogLevelFilter::Info).unwrap();
 
     let matches = clap::App::new("csearch")
         .version(&crate_version!()[..])

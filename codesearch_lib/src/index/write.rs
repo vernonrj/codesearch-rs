@@ -168,6 +168,7 @@ impl IndexWriter {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
                                        "Too many trigrams, ignoring"));
         }
+        debug!("{} {} {:?}", size, self.trigram.len(), filename);
         self.bytes_written += size as usize;
 
         let file_id = try!(self.add_name(filename));

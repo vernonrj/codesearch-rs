@@ -15,6 +15,7 @@ mod customlogger;
 
 use codesearch_lib::index;
 use codesearch_lib::index::write::IndexErrorKind;
+use log::LogLevelFilter;
 
 use std::collections::HashSet;
 use std::env;
@@ -54,7 +55,6 @@ fn is_regular_file(meta: FileType) -> bool {
 }
 
 fn main() {
-    customlogger::init().unwrap();
     let matches = clap::App::new("cindex")
         .version(&crate_version!()[..])
         .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
@@ -126,7 +126,17 @@ With no path arguments, cindex -reset removes the index.")
          .long("filelist")
          .takes_value(true)
          .help("path to file containing a list of file paths to index"))
+    .arg(clap::Arg::with_name("verbose")
+         .long("verbose")
+         .help("print extra information"))
     .get_matches();
+
+    let max_log_level = if matches.is_present("verbose") {
+        LogLevelFilter::Trace
+    } else {
+        LogLevelFilter::Info
+    };
+    customlogger::init(max_log_level).unwrap();
 
     let mut excludes: Vec<String> = vec![".csearchindex".to_string()];
     let mut args = Vec::<String>::new();
