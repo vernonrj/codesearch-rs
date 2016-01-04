@@ -7,7 +7,7 @@
 use std::vec;
 use std::fs::File;
 use std::path::Path;
-use std::io::{self, Cursor, Seek, SeekFrom, Read, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, Cursor, Seek, SeekFrom, Read, BufReader, BufWriter, Write};
 use std::ffi::OsString;
 use std::ops::Deref;
 use std::{u32, u64};
@@ -20,8 +20,10 @@ use index::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use index::memmap::{Mmap, Protection};
 
 use index::{MAGIC, TRAILER_MAGIC};
+
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
+use super::{copy_file, get_offset};
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -246,10 +248,6 @@ impl IndexWriter {
     }
 }
 
-pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
-    seekable.seek(SeekFrom::Current(0))
-}
-
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 struct PostEntry(u64);
@@ -358,22 +356,6 @@ impl<R: Read> Iterator for TrigramIter<R> {
 }
 
 
-pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R) {
-    src.seek(SeekFrom::Start(0)).unwrap();
-    let mut buf_src = BufReader::new(src); 
-    loop {
-        let length = if let Ok(b) = buf_src.fill_buf() {
-            if b.len() == 0 {
-                break;
-            }
-            dest.write_all(b).unwrap();
-            b.len()
-        } else {
-            break;
-        };
-        buf_src.consume(length);
-    }
-}
 
 struct PostHeap {
     ch: Vec<Peekable<vec::IntoIter<PostEntry>>>
