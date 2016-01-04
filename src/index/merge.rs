@@ -33,7 +33,7 @@
 
 use index::varint;
 use index::reader::read::{Index, POST_ENTRY_SIZE};
-use index::writer::write::{get_offset, copy_file, IndexWriter};
+use index::writer::{get_offset, copy_file, IndexWriter};
 use index;
 
 use index::tempfile::TempFile;

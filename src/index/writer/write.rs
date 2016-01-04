@@ -8,10 +8,7 @@ use std::vec;
 use std::fs::File;
 use std::path::Path;
 use std::io::{self, Cursor, Seek, SeekFrom, Read, BufRead, BufReader, BufWriter, Write};
-use std::io::Error;
 use std::ffi::OsString;
-use std::error;
-use std::fmt;
 use std::ops::Deref;
 use std::{u32, u64};
 use std::mem;
@@ -24,6 +21,7 @@ use index::memmap::{Mmap, Protection};
 
 use index::{MAGIC, TRAILER_MAGIC};
 use super::sparseset::SparseSet;
+use super::error::{IndexError, IndexErrorKind, IndexResult};
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -47,67 +45,6 @@ const MAX_TEXT_TRIGRAMS: usize = 30000;
 const MAX_INVALID_UTF8_RATION: f64 = 0.1;
 const NPOST: usize = (64 << 20) / 8;
 
-#[derive(Debug)]
-pub struct IndexError {
-    kind: IndexErrorKind,
-    error: Box<error::Error + Send + Sync>
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IndexErrorKind {
-    IoError,
-    FileTooLong,
-    LineTooLong,
-    TooManyTrigrams,
-    BinaryDataPresent,
-    HighInvalidUtf8Ratio
-}
-
-
-impl IndexError {
-    pub fn new<E>(kind: IndexErrorKind, error: E) -> IndexError
-        where E: Into<Box<error::Error + Send + Sync>>
-    {
-        IndexError {
-            kind: kind,
-            error: error.into()
-        }
-    }
-    pub fn kind(&self) -> IndexErrorKind {
-        self.kind.clone()
-    }
-}
-
-impl From<io::Error> for IndexError {
-    fn from(e: io::Error) -> Self {
-        IndexError {
-            kind: IndexErrorKind::IoError,
-            error: Box::new(e)
-        }
-    }
-}
-
-impl error::Error for IndexError {
-    fn description(&self) -> &str {
-        match self.kind {
-            IndexErrorKind::IoError => self.error.description(),
-            IndexErrorKind::FileTooLong => "file too long",
-            IndexErrorKind::LineTooLong => "line too long",
-            IndexErrorKind::TooManyTrigrams => "too many trigrams in file",
-            IndexErrorKind::BinaryDataPresent => "binary file",
-            IndexErrorKind::HighInvalidUtf8Ratio => "Too many invalid utf-8 sequences"
-        }
-    }
-}
-
-impl fmt::Display for IndexError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        self.error.fmt(fmt)
-    }
-}
-
-
-pub type IndexResult<T> = Result<T, IndexError>;
 
 pub struct IndexWriter {
     paths: Vec<OsString>,

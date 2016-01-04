@@ -13,7 +13,7 @@ mod customlogger;
 mod index;
 
 use index::reader::read::Index;
-use index::writer::write::{IndexWriter, IndexErrorKind};
+use index::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 
 use std::collections::HashSet;
