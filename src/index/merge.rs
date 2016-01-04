@@ -33,7 +33,7 @@
 
 use index::varint;
 use index::reader::read::{Index, POST_ENTRY_SIZE};
-use index::writer::{get_offset, copy_file, write_trigram, write_u32};
+use index::writer::{get_offset, copy_file, write_trigram};
 use index;
 
 use index::tempfile::TempFile;
@@ -177,8 +177,8 @@ impl<W: Write + Seek> PostDataWriter<W> {
         }
         varint::write_uvarint(&mut self.out, 0).unwrap();
         write_trigram(&mut self.post_index_file, self.t).unwrap();
-        write_u32(&mut self.post_index_file, self.count).unwrap();
-        write_u32(&mut self.post_index_file, self.offset - self.base).unwrap();
+        self.post_index_file.write_u32::<BigEndian>(self.count).unwrap();
+        self.post_index_file.write_u32::<BigEndian>(self.offset - self.base).unwrap();
     }
 }
 
@@ -369,11 +369,11 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     trace!("post_index = {}", post_index); 
 
 
-    write_u32(&mut ix3, path_data as u32).unwrap();
-    write_u32(&mut ix3, name_data as u32).unwrap();
-    write_u32(&mut ix3, post_data as u32).unwrap();
-    write_u32(&mut ix3, name_index as u32).unwrap();
-    write_u32(&mut ix3, post_index as u32).unwrap();
+    ix3.write_u32::<BigEndian>(path_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(name_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(post_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(name_index as u32).unwrap();
+    ix3.write_u32::<BigEndian>(post_index as u32).unwrap();
     try!(ix3.write(index::TRAILER_MAGIC.as_bytes()));
     Ok(())
 }

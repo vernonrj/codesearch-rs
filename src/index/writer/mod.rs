@@ -41,10 +41,3 @@ pub fn write_trigram<W: Write>(writer: &mut W, t: u32) -> io::Result<usize> {
                             (t & 0xff) as u8];
     writer.write(&mut buf)
 }
-pub fn write_u32<W: Write>(writer: &mut W, u: u32) -> io::Result<usize> {
-    let mut buf: [u8; 4] = [((u >> 24) & 0xff) as u8,
-                            ((u >> 16) & 0xff) as u8,
-                            ((u >> 8) & 0xff) as u8,
-                            (u & 0xff) as u8];
-    writer.write(&mut buf)
-}

@@ -20,7 +20,7 @@ use index::{MAGIC, TRAILER_MAGIC};
 
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
-use super::{copy_file, get_offset, write_u32};
+use super::{copy_file, get_offset};
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
 use super::trigramiter::TrigramIter;
@@ -158,7 +158,7 @@ impl IndexWriter {
         try!(self.post_index.flush());
         copy_file(&mut self.index, &mut self.post_index.get_mut());
         for v in off.iter() {
-            try!(write_u32(&mut self.index, *v as u32));
+            self.index.write_u32::<BigEndian>(*v as u32).unwrap();
         }
         try!(self.index.write(TRAILER_MAGIC.as_bytes()));
         info!("{} data bytes, {} index bytes",
@@ -204,8 +204,8 @@ impl IndexWriter {
             varint::write_uvarint(&mut self.index, 0).unwrap();
 
             self.post_index.write(&mut buf).unwrap();
-            write_u32(&mut self.post_index, nfile).unwrap();
-            write_u32(&mut self.post_index, offset as u32).unwrap();
+            self.post_index.write_u32::<BigEndian>(nfile).unwrap();
+            self.post_index.write_u32::<BigEndian>(offset as u32).unwrap();
 
             if trigram == (1<<24)-1 {
                 break;
