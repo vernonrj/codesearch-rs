@@ -118,12 +118,16 @@ empty, $HOME/.csearchindex.
     let index_path = index::csearch_index();
     let i = Index::open(index_path).unwrap();
 
-    // Get the pseudo-regexp (built using trigrams)
-    let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
-    let q = regexp::RegexInfo::new(&expr).query;
-
     // Find all possibly matching files using the pseudo-regexp
-    let mut post = i.query(q, None);
+    let mut post = if matches.is_present("bruteforce") {
+        i.query(regexp::Query::all(), None)
+    } else {
+        // Get the pseudo-regexp (built using trigrams)
+        let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
+        let q = regexp::RegexInfo::new(&expr).query;
+
+        i.query(q, None)
+    };
 
     // If provided, filter possibly matching files via FILE_PATTERN
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
