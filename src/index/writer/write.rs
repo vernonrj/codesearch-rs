@@ -21,8 +21,8 @@ use index::tempfile::{TempFile, NamedTempFile};
 use index::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use index::memmap::{Mmap, Protection};
 
-use index;
-use index::sparseset::SparseSet;
+use index::{MAGIC, TRAILER_MAGIC};
+use super::sparseset::SparseSet;
 
 // Index writing.  See read.rs for details of on-disk format.
 //
@@ -201,7 +201,7 @@ impl IndexWriter {
     }
     pub fn flush(mut self) -> io::Result<()> {
         self.add_name(&OsString::new()).unwrap();
-        Self::write_string(&mut self.index, index::MAGIC).unwrap();
+        Self::write_string(&mut self.index, MAGIC).unwrap();
 
         let mut off = [0; 5];
         off[0] = get_offset(&mut self.index).unwrap();
@@ -225,7 +225,7 @@ impl IndexWriter {
         for v in off.iter() {
             Self::write_u32(&mut self.index, *v as u32).unwrap();
         }
-        Self::write_string(&mut self.index, index::TRAILER_MAGIC).unwrap();
+        Self::write_string(&mut self.index, TRAILER_MAGIC).unwrap();
         info!("{} data bytes, {} index bytes",
               self.bytes_written,
               get_offset(&mut self.index).unwrap());

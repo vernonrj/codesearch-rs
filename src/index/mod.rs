@@ -8,11 +8,12 @@ extern crate regex_syntax;
 extern crate varint;
 
 pub mod read;
-pub mod write;
+pub mod writer;
 pub mod merge;
 pub mod regexp;
-mod sparseset;
 mod search;
+
+pub use self::writer::write;
 
 use std::env;
 
