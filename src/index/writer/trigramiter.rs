@@ -1,9 +1,89 @@
-use std::io::{self, BufReader, Read};
+use std::io::{self, Read, BufRead};
+use std::cmp;
 
 use super::error::{IndexResult, IndexError, IndexErrorKind};
 
-pub struct TrigramIter<R: Read> {
-    reader: io::Bytes<BufReader<R>>,
+/// A slight tweak of Rust's BufReader
+struct SharedBuffer {
+    inner: Vec<u8>
+}
+
+impl SharedBuffer {
+    pub fn new(cap: usize) -> Self {
+        SharedBuffer {
+            inner: vec![0; cap]
+        }
+    }
+    pub fn open<'a, R: Read>(&'a mut self, reader: R) -> SharedBufferReader<'a, R> {
+        SharedBufferReader::new(reader, self)
+    }
+    pub fn len(&self) -> usize { self.inner.len() }
+}
+
+struct SharedBufferReader<'a, R: Read> {
+    inner: R,
+    shared: &'a mut SharedBuffer,
+    pos: usize,
+    cap: usize
+}
+
+impl<'a, R: Read> SharedBufferReader<'a, R> {
+    fn new(inner: R, shared: &'a mut SharedBuffer) -> Self {
+        SharedBufferReader {
+            inner: inner,
+            shared: shared,
+            pos: 0,
+            cap: 0
+        }
+    }
+}
+
+
+impl<'a, R: Read> Read for SharedBufferReader<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.pos == self.cap && buf.len() >= self.shared.len() {
+            return self.inner.read(buf);
+        }
+        let nread = {
+            let mut rem = try!(self.fill_buf());
+            try!(rem.read(buf))
+        };
+        self.consume(nread);
+        Ok(nread)
+    }
+}
+
+impl<'a, R: Read> BufRead for SharedBufferReader<'a, R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.pos == self.cap {
+            self.cap = try!(self.inner.read(&mut self.shared.inner));
+            self.pos = 0;
+        }
+        Ok(&self.shared.inner[self.pos..self.cap])
+    }
+    fn consume(&mut self, amt: usize) {
+        self.pos = cmp::min(self.pos + amt, self.cap);
+    }
+}
+
+
+
+pub struct TrigramReader {
+    inner: SharedBuffer
+}
+
+impl TrigramReader {
+    pub fn new() -> Self { TrigramReader { inner: SharedBuffer::new(16384) } }
+    pub fn open<'a, R: Read>(&'a mut self,
+                             r: R,
+                             max_invalid: u64,
+                             max_line_len: u64) -> TrigramIter<'a, R> {
+        TrigramIter::new(&mut self.inner, r, max_invalid, max_line_len)
+    }
+}
+
+pub struct TrigramIter<'a, R: Read> {
+    reader: io::Bytes<SharedBufferReader<'a, R>>,
     current_value: u32,
     num_read: usize,
     inv_cnt: u64,
@@ -12,10 +92,13 @@ pub struct TrigramIter<R: Read> {
     max_line_len: u64
 }
 
-impl<R: Read> TrigramIter<R> {
-    pub fn new(r: R, max_invalid: u64, max_line_len: u64) -> TrigramIter<R> {
+impl<'a, R: Read> TrigramIter<'a, R> {
+    fn new(shared: &'a mut SharedBuffer,
+               r: R,
+               max_invalid: u64,
+               max_line_len: u64) -> TrigramIter<'a, R> {
         TrigramIter {
-            reader: BufReader::with_capacity(16384, r).bytes(),
+            reader: shared.open(r).bytes(),
             current_value: 0,
             num_read: 0,
             inv_cnt: 0,
@@ -36,7 +119,7 @@ impl<R: Read> TrigramIter<R> {
     }
 }
 
-impl<R: Read> Iterator for TrigramIter<R> {
+impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
     type Item = IndexResult<u32>;
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
@@ -107,7 +190,8 @@ fn valid_utf8(c1: u8, c2: u8) -> bool {
 
 #[test]
 fn test_trigram_iter_once() {
-    let c = TrigramIter::new("hello".as_bytes(), 0, 100).next().unwrap();
+    let c = TrigramReader::new()
+        .open("hello".as_bytes(), 0, 100).next().unwrap();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
@@ -116,7 +200,8 @@ fn test_trigram_iter_once() {
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramIter::new("hello".as_bytes(), 0, 100)
+    let trigrams: Vec<u32> = TrigramReader::new()
+        .open("hello".as_bytes(), 0, 100)
         .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16

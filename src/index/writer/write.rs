@@ -23,7 +23,7 @@ use super::error::{IndexError, IndexErrorKind, IndexResult};
 use super::{copy_file, get_offset};
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
-use super::trigramiter::TrigramIter;
+use super::trigramiter::TrigramReader;
 use super::NPOST;
 
 // Index writing.  See read.rs for details of on-disk format.
@@ -58,6 +58,7 @@ pub struct IndexWriter {
 
     name_data: BufWriter<TempFile>,
     name_index: BufWriter<TempFile>,
+    trigram_reader: TrigramReader,
 
     trigram: SparseSet,
 
@@ -82,6 +83,7 @@ impl IndexWriter {
             paths: Vec::new(),
             name_data: make_temp_buf(),
             name_index: make_temp_buf(),
+            trigram_reader: TrigramReader::new(),
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
@@ -107,7 +109,7 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
-        for each_trigram in TrigramIter::new(f, max_utf8_invalid, self.max_line_len) {
+        for each_trigram in self.trigram_reader.open(f, max_utf8_invalid, self.max_line_len) {
             self.trigram.insert(try!(each_trigram));
         }
         if (self.trigram.len() as u64) > self.max_trigram_count {
