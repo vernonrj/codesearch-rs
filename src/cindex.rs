@@ -166,9 +166,7 @@ With no path arguments, cindex -reset removes the index.")
     });
 
     if matches.is_present("list-paths") {
-        // TODO: fail gracefully if index doesn't exist
-        let index_path = index::csearch_index();
-        let i = IndexReader::open(index_path).expect("Index open failed!");
+        let i = open_index_or_fail();
         for each_file in i.indexed_paths() {
             println!("{}", each_file);
         }
@@ -198,8 +196,7 @@ With no path arguments, cindex -reset removes the index.")
     }
 
     if args.is_empty() {
-        let index_path = index::csearch_index();
-        let i = IndexReader::open(index_path).expect("failed to open Index");
+        let i = open_index_or_fail();
         for each_file in i.indexed_paths() {
             args.push(each_file);
         }
@@ -283,4 +280,15 @@ With no path arguments, cindex -reset removes the index.")
     }
 
     info!("done");
+}
+
+fn open_index_or_fail() -> IndexReader {
+    let index_path = index::csearch_index();
+    match IndexReader::open(&index_path) {
+        Ok(i) => i,
+        Err(e) => {
+            error!("open {}: {}", index_path, e);
+            std::process::exit(101);
+        }
+    }
 }
