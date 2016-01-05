@@ -12,7 +12,7 @@ extern crate log;
 mod customlogger;
 mod index;
 
-use index::reader::read::Index;
+use index::reader::read::IndexReader;
 use index::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 
@@ -168,7 +168,7 @@ With no path arguments, cindex -reset removes the index.")
     if matches.is_present("list-paths") {
         // TODO: fail gracefully if index doesn't exist
         let index_path = index::csearch_index();
-        let i = Index::open(index_path).expect("Index open failed!");
+        let i = IndexReader::open(index_path).expect("Index open failed!");
         for each_file in i.indexed_paths() {
             println!("{}", each_file);
         }
@@ -199,7 +199,7 @@ With no path arguments, cindex -reset removes the index.")
 
     if args.is_empty() {
         let index_path = index::csearch_index();
-        let i = Index::open(index_path).expect("failed to open Index");
+        let i = IndexReader::open(index_path).expect("failed to open Index");
         for each_file in i.indexed_paths() {
             args.push(each_file);
         }

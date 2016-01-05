@@ -88,7 +88,7 @@ pub type FileID = u32;
 /// ```rust
 /// # extern crate regex_syntax;
 /// # extern crate codesearch_lib;
-/// # use codesearch_lib::index::read::Index;
+/// # use codesearch_lib::index::read::IndexReader;
 /// # use codesearch_lib::index::regexp::RegexInfo;
 /// # use regex_syntax::Expr;
 /// # use std::io;
@@ -97,7 +97,7 @@ pub type FileID = u32;
 /// let expr = Expr::parse(r"Pattern").unwrap();
 /// let q = RegexInfo::new(&expr).query;
 ///
-/// let idx = try!(Index::open("foo.txt"));
+/// let idx = try!(IndexReader::open("foo.txt"));
 ///
 /// let matching_file_ids = idx.query(q, None);
 ///
@@ -107,7 +107,7 @@ pub type FileID = u32;
 /// # Ok(())
 /// # }
 /// ```
-pub struct Index {
+pub struct IndexReader {
     data: Mmap,
     path_data: u32,
     name_data: u32,
@@ -118,7 +118,7 @@ pub struct Index {
     pub num_post: usize
 }
 
-impl Debug for Index {
+impl Debug for IndexReader {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "({}, {}, {}, {}, {}, {}, {}",
                self.path_data, self.name_data, self.post_data,
@@ -134,7 +134,7 @@ fn extract_data_from_mmap(data: &Mmap, offset: usize) -> u32 {
 }
 
 
-impl Index {
+impl IndexReader {
     fn extract_data(&self, offset: usize) -> u32 {
         unsafe {
             let mut buf = Cursor::new(&self.data.as_slice()[ offset .. offset + 4]);
@@ -144,13 +144,13 @@ impl Index {
     /// Open an index file from path
     ///
     /// ```no_run
-    /// # use codesearch_lib::index::read::Index;
+    /// # use codesearch_lib::index::read::IndexReader;
     /// # use std::io;
     /// # fn foo() -> io::Result<()> {
-    /// let idx = try!(Index::open("foo.txt"));
+    /// let idx = try!(IndexReader::open("foo.txt"));
     /// # Ok(())
     /// # }
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Index> {
+    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<IndexReader> {
         Mmap::open_path(path, Protection::Read)
             .map(|m| {
                 let n = m.len() - (TRAILER_MAGIC.bytes().len()) - 5*4;
@@ -170,7 +170,7 @@ impl Index {
                 } else {
                     0
                 };
-                Index {
+                IndexReader {
                     data: m,
                     path_data: path_data,
                     name_data: name_data,
@@ -377,7 +377,7 @@ fn merge_or(l1: Vec<u32>, l2: Vec<u32>) -> Vec<u32> {
 
 #[derive(Debug)]
 struct PostReader<'a, 'b> {
-    index: &'a Index,
+    index: &'a IndexReader,
     count: isize,
     offset: u32,
     fileid: i64,
@@ -386,7 +386,7 @@ struct PostReader<'a, 'b> {
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
-    pub fn new(index: &'a Index,
+    pub fn new(index: &'a IndexReader,
                trigram: u32,
                restrict: &'b mut Option<Vec<u32>>) -> Option<Self>
     {
@@ -408,7 +408,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             restrict: restrict
         })
     }
-    pub fn and(index: &'a Index,
+    pub fn and(index: &'a IndexReader,
                list: Vec<u32>,
                trigram: u32,
                restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
@@ -432,7 +432,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             Vec::new()
         }
     }
-    pub fn or(index: &'a Index,
+    pub fn or(index: &'a IndexReader,
               list: Vec<u32>,
               trigram: u32,
               restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
@@ -457,7 +457,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             Vec::new()
         }
     }
-    pub fn list(index: &'a Index, trigram: u32, restrict: &mut Option<Vec<u32>>) -> Vec<u32> {
+    pub fn list(index: &'a IndexReader, trigram: u32, restrict: &mut Option<Vec<u32>>) -> Vec<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut x = Vec::<u32>::new();
             while r.next() {

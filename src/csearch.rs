@@ -17,7 +17,7 @@ mod index;
 mod grep;
 
 use index::reader::regexp;
-use index::reader::read::Index;
+use index::reader::read::IndexReader;
 
 use std::io::{self, Write};
 use std::collections::HashMap;
@@ -116,7 +116,7 @@ empty, $HOME/.csearchindex.
 
     // Get the index from file
     let index_path = index::csearch_index();
-    let i = Index::open(index_path).unwrap();
+    let i = IndexReader::open(index_path).unwrap();
 
     // Find all possibly matching files using the pseudo-regexp
     let mut post = if matches.is_present("bruteforce") {

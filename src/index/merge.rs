@@ -32,7 +32,7 @@
 // Rename C's index onto the new index.
 
 use index::varint;
-use index::reader::read::{Index, POST_ENTRY_SIZE};
+use index::reader::read::{IndexReader, POST_ENTRY_SIZE};
 use index::writer::{get_offset, copy_file};
 use index;
 
@@ -62,7 +62,7 @@ pub struct IdRange {
 }
 
 pub struct PostMapReader<'a> {
-    index: &'a Index,
+    index: &'a IndexReader,
     id_map: Vec<IdRange>,
     tri_num: u32,
     trigram: u32,
@@ -75,7 +75,7 @@ pub struct PostMapReader<'a> {
 }
 
 impl<'a> PostMapReader<'a> {
-    pub fn new(index: &'a Index, id_map: Vec<IdRange>) -> PostMapReader<'a> {
+    pub fn new(index: &'a IndexReader, id_map: Vec<IdRange>) -> PostMapReader<'a> {
         let s = unsafe { index.as_slice() };
         let mut p = PostMapReader {
             index: index,
@@ -194,8 +194,8 @@ impl<W: Write + Seek> PostDataWriter<W> {
 }
 
 pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
-    let ix1 = try!(Index::open(src1));
-    let ix2 = try!(Index::open(src2));
+    let ix1 = try!(IndexReader::open(src1));
+    let ix2 = try!(IndexReader::open(src2));
     let paths1 = ix1.indexed_paths();
     let paths2 = ix2.indexed_paths();
 
