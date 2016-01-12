@@ -36,3 +36,14 @@ pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R)
     }
 }
 
+
+pub trait WriteTrigram: Write {
+    fn write_trigram(&mut self, t: u32) -> io::Result<()> {
+        let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
+                                ((t >> 8) & 0xff) as u8,
+                                (t & 0xff) as u8];
+        self.write_all(&mut buf)
+    }
+}
+
+impl<W: Write + ?Sized> WriteTrigram for W {}

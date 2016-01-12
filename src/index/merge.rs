@@ -33,7 +33,7 @@
 
 use index::varint;
 use index::reader::read::{IndexReader, POST_ENTRY_SIZE};
-use index::writer::{get_offset, copy_file};
+use index::writer::{WriteTrigram, get_offset, copy_file};
 use index;
 
 use index::tempfile::TempFile;
@@ -43,16 +43,6 @@ use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter};
 use std::u32;
 use std::fs::File;
 
-trait WriteTrigram: Write {
-    fn write_trigram(&mut self, t: u32) -> io::Result<()> {
-        let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
-                                ((t >> 8) & 0xff) as u8,
-                                (t & 0xff) as u8];
-        self.write_all(&mut buf)
-    }
-}
-
-impl<W: Write + ?Sized> WriteTrigram for W {}
 
 #[derive(Debug)]
 pub struct IdRange {

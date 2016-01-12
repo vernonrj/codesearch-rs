@@ -113,7 +113,7 @@ pub struct IndexReader {
     name_data: u32,
     pub post_data: u32,
     name_index: usize,
-    post_index: usize,
+    pub post_index: usize,
     pub num_name: usize,
     pub num_post: usize
 }

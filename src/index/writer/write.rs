@@ -19,7 +19,7 @@ use index::{MAGIC, TRAILER_MAGIC};
 
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
-use super::{copy_file, get_offset};
+use super::{WriteTrigram, copy_file, get_offset};
 use super::postinglist::PostingList;
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
@@ -193,25 +193,16 @@ impl IndexWriter {
 
         while let Some(plist) = PostingList::aggregate_from(&mut h) {
             let offset = get_offset(&mut self.index).unwrap() - offset0;
-            let trigram = plist.trigram();
-            let mut buf: [u8; 3] = [
-                ((trigram >> 16) & 0xff) as u8,
-                ((trigram >> 8) & 0xff) as u8,
-                (trigram & 0xff) as u8];
 
             // posting list
-            self.index.write(&mut buf).unwrap();
+            self.index.write_trigram(plist.trigram()).unwrap();
             for each_file in plist.iter_deltas() {
                 varint::write_uvarint(&mut self.index, each_file).unwrap();
             }
 
-            self.post_index.write(&mut buf).unwrap();
+            self.post_index.write_trigram(plist.trigram()).unwrap();
             self.post_index.write_u32::<BigEndian>(plist.delta_len() as u32).unwrap();
             self.post_index.write_u32::<BigEndian>(offset as u32).unwrap();
-
-            if trigram == (1<<24)-1 {
-                break;
-            }
         }
         Ok(())
     }

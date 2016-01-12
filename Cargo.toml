@@ -32,3 +32,4 @@ path = "src/csearch.rs"
 [[bin]]
 name = "cindex"
 path = "src/cindex.rs"
+
