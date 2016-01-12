@@ -8,6 +8,7 @@ mod write;
 mod error;
 mod sparseset;
 
+mod postinglist;
 mod postentry;
 mod postheap;
 mod trigramiter;

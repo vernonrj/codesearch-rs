@@ -9,7 +9,6 @@ use std::path::Path;
 use std::io::{self, Seek, SeekFrom, BufWriter, Write};
 use std::ffi::OsString;
 use std::ops::Deref;
-use std::u32;
 use std::mem;
 
 use index::varint;
@@ -21,6 +20,7 @@ use index::{MAGIC, TRAILER_MAGIC};
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
 use super::{copy_file, get_offset};
+use super::postinglist::PostingList;
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
 use super::trigramiter::TrigramReader;
@@ -188,33 +188,25 @@ impl IndexWriter {
         mem::swap(&mut v, &mut self.post);
         heap.add_mem(v);
 
-        let mut h = heap.into_iter();
-        let mut e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
+        let mut h = heap.into_iter().peekable();
         let offset0 = get_offset(&mut self.index).unwrap();
 
-        loop {
+        while let Some(plist) = PostingList::aggregate_from(&mut h) {
             let offset = get_offset(&mut self.index).unwrap() - offset0;
-            let trigram = e.trigram();
+            let trigram = plist.trigram();
             let mut buf: [u8; 3] = [
                 ((trigram >> 16) & 0xff) as u8,
                 ((trigram >> 8) & 0xff) as u8,
                 (trigram & 0xff) as u8];
 
             // posting list
-            let mut file_id = u32::MAX;
-            let mut nfile: u32 = 0;
             self.index.write(&mut buf).unwrap();
-            while e.trigram() == trigram && (trigram != (1<<24)-1) {
-                let fdiff = e.file_id().wrapping_sub(file_id);
-                varint::write_uvarint(&mut self.index, fdiff).unwrap();
-                file_id = e.file_id();
-                nfile += 1;
-                e = h.next().unwrap_or(PostEntry::new((1<<24)-1, 0));
+            for each_file in plist.iter_deltas() {
+                varint::write_uvarint(&mut self.index, each_file).unwrap();
             }
-            varint::write_uvarint(&mut self.index, 0).unwrap();
 
             self.post_index.write(&mut buf).unwrap();
-            self.post_index.write_u32::<BigEndian>(nfile).unwrap();
+            self.post_index.write_u32::<BigEndian>(plist.delta_len() as u32).unwrap();
             self.post_index.write_u32::<BigEndian>(offset as u32).unwrap();
 
             if trigram == (1<<24)-1 {
