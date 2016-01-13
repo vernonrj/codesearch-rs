@@ -14,6 +14,7 @@ use std::mem;
 use index::varint;
 use index::tempfile::{TempFile, NamedTempFile};
 use index::byteorder::{BigEndian, WriteBytesExt};
+// use index::hprof;
 
 use index::{MAGIC, TRAILER_MAGIC};
 
@@ -97,11 +98,13 @@ impl IndexWriter {
         self.paths.extend(paths);
     }
     pub fn add_file<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<()> {
+        // let frame = hprof::enter("IndexWriter::add_file");
         let f = try!(File::open(filename.as_ref()));
         let metadata = try!(f.metadata());
         self.add(filename, f, metadata.len())
     }
     fn add<P: AsRef<Path>>(&mut self, filename: P, f: File, size: u64) -> IndexResult<()> {
+        // let frame = hprof::enter("IndexWriter::add");
         if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
                                        format!("file too long, ignoring ({} > {})",
@@ -109,8 +112,16 @@ impl IndexWriter {
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
-        for each_trigram in self.trigram_reader.open(f, max_utf8_invalid, self.max_line_len) {
-            self.trigram.insert(try!(each_trigram));
+        {
+            let mut trigrams = self.trigram_reader.open(f, max_utf8_invalid, self.max_line_len);
+            // let trigram_insert_frame = hprof::enter("IndexWriter::add: Insert Trigrams");
+            while let Some(each_trigram) = trigrams.next() {
+                self.trigram.insert(each_trigram);
+            }
+            // drop(trigram_insert_frame);
+            if let Some(e) = trigrams.error() {
+                return e;
+            }
         }
         if (self.trigram.len() as u64) > self.max_trigram_count {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
@@ -122,9 +133,12 @@ impl IndexWriter {
         self.bytes_written += size as usize;
 
         let file_id = try!(self.add_name(filename));
-        let mut v = Vec::<u32>::new();
-        mem::swap(&mut v, &mut self.trigram.dense_mut());
-        for each_trigram in v {
+        let v = self.trigram.take_dense();
+        self.push_trigrams_to_post(file_id, v)
+    }
+    fn push_trigrams_to_post(&mut self, file_id: u32, trigrams: Vec<u32>) -> IndexResult<()> {
+        // let frame = hprof::enter("IndexWriter::push_trigrams_to_post");
+        for each_trigram in trigrams {
             if self.post.len() >= NPOST {
                 try!(self.flush_post());
             }
@@ -133,6 +147,7 @@ impl IndexWriter {
         Ok(())
     }
     fn add_name<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<u32> {
+        // let frame = hprof::enter("IndexWriter::add_name");
         let offset = try!(get_offset(&mut self.name_data));
         try!(self.name_index.write_u32::<BigEndian>(offset as u32));
 
@@ -187,6 +202,7 @@ impl IndexWriter {
         info!("{} data bytes, {} index bytes",
               self.bytes_written,
               try!(get_offset(&mut self.index)));
+        // hprof::profiler().print_timing();
         Ok(())
     }
     fn merge_post(&mut self) -> io::Result<()> {

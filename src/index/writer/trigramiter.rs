@@ -89,10 +89,14 @@ pub struct TrigramIter<'a, R: Read> {
     inv_cnt: u64,
     max_invalid: u64,
     line_len: u64,
-    max_line_len: u64
+    max_line_len: u64,
+    error: Option<IndexResult<()>>
 }
 
 impl<'a, R: Read> TrigramIter<'a, R> {
+    pub fn error(&mut self) -> Option<IndexResult<()>> {
+        self.error.take()
+    }
     fn new(shared: &'a mut SharedBuffer,
                r: R,
                max_invalid: u64,
@@ -104,35 +108,38 @@ impl<'a, R: Read> TrigramIter<'a, R> {
             inv_cnt: 0,
             max_invalid: max_invalid,
             line_len: 0,
-            max_line_len: max_line_len
+            max_line_len: max_line_len,
+            error: None
         }
     }
-    fn next_char(&mut self) -> io::Result<Option<u8>> {
+    fn next_char(&mut self) -> Option<u8> {
         match self.reader.next() {
-            Some(Err(e)) => Err(e),
+            Some(Err(e)) => {
+                self.error = Some(Err(e.into()));
+                None
+            },
             Some(Ok(c)) => {
                 self.num_read += 1;
-                Ok(Some(c))
+                Some(c)
             },
-            None => Ok(None)
+            None => None
         }
     }
 }
 
 impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
-    type Item = IndexResult<u32>;
+    type Item = u32;
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
-            Ok(Some(c)) => c,
-            Ok(None) => {
+            Some(c) => c,
+            _ => {
                 return if self.num_read > 0 && self.num_read < 3 {
                     self.num_read = 0;
-                    return Some(Ok(self.current_value));
+                    return Some(self.current_value);
                 } else {
                     return None;
                 };
             }
-            Err(_) => return None     // done with error
         };
         self.current_value = ((1 << 24) - 1) & ((self.current_value << 8) | (c as u32));
         if self.num_read < 3 {
@@ -142,32 +149,35 @@ impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
             let b2 = self.current_value & 0xff;
             if b1 == 0x00 || b2 == 0x00 {
                 // Binary file. Skip
-                Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
-                                         format!("Binary File. Bytes {:02x}{:02x} at offset {}",
-                                                 b1, b2, self.num_read))))
+                self.error = Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
+                                                      format!("Binary File. Bytes {:02x}{:02x} at offset {}",
+                                                              b1, b2, self.num_read))));
+                None
             } else if !valid_utf8(b1 as u8, b2 as u8) {
                 // invalid utf8 data
                 self.inv_cnt += 1;
                 if self.inv_cnt > self.max_invalid {
-                    Some(Err(IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
-                                             format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
-                                                     self.num_read, self.inv_cnt,
-                                                     (self.inv_cnt as f64) / (self.num_read as f64)
-                                                     ))))
+                    self.error = Some(Err(IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
+                                                          format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
+                                                                  self.num_read, self.inv_cnt,
+                                                                  (self.inv_cnt as f64) / (self.num_read as f64)
+                                                                 ))));
+                    None
                 } else {
                     return self.next();
                 }
             } else if self.line_len > self.max_line_len {
-                Some(Err(IndexError::new(IndexErrorKind::LineTooLong,
-                                         format!("Line too long ({} > {})",
-                                                 self.line_len, self.max_line_len))))
+                self.error = Some(Err(IndexError::new(IndexErrorKind::LineTooLong,
+                                                      format!("Line too long ({} > {})",
+                                                      self.line_len, self.max_line_len))));
+                None
             } else {
                 if c == ('\n' as u8) { 
                     self.line_len = 0;
                 } else {
                     self.line_len += 1;
                 }
-                Some(Ok(self.current_value))
+                Some(self.current_value)
             }
         }
     }

@@ -4,8 +4,10 @@
 // license that can be found in the LICENSE file.
 
 #![allow(dead_code)]
+use std::mem;
 
 const MAX_SIZE: u32 = 1 << 24;
+const STARTING_DENSE_SIZE: usize = 10000;
 
 pub struct SparseSet {
     sparse: Vec<u32>,
@@ -18,14 +20,12 @@ impl SparseSet {
         unsafe { v.set_len(MAX_SIZE as usize) };
         let s = SparseSet {
             sparse: v,
-            dense: Vec::with_capacity(1000)
+            dense: Vec::with_capacity(STARTING_DENSE_SIZE)
         };
         s
     }
     pub fn insert(&mut self, x: u32) {
-        if (x as usize) >= self.sparse.len() {
-            warn!("value {} too large to be contained in sparse set", x);
-        }
+        debug_assert!((x as usize) < self.sparse.len());
         let v = self.sparse[x as usize];
         let n = self.dense.len();
         if (v as usize) < n && self.dense[v as usize] == x {
@@ -47,8 +47,11 @@ impl SparseSet {
     pub fn len(&self) -> usize { self.dense.len() }
     pub fn is_empty(&self) -> bool { self.dense.is_empty() }
     pub fn into_vec(self) -> Vec<u32> { self.dense }
-    pub fn dense<'a>(&'a self) -> &'a Vec<u32> { &self.dense }
-    pub fn dense_mut<'a>(&'a mut self) -> &'a mut Vec<u32> { &mut self.dense }
+    pub fn take_dense(&mut self) -> Vec<u32> {
+        let mut dense_new = Vec::with_capacity(STARTING_DENSE_SIZE);
+        mem::swap(&mut dense_new, &mut self.dense);
+        dense_new
+    }
 }
 
 impl IntoIterator for SparseSet {

@@ -1,10 +1,13 @@
 #![allow(dead_code)]
+extern crate chrono;
 extern crate tempfile;
 extern crate byteorder;
 extern crate num;
 extern crate memmap;
 extern crate regex;
 extern crate regex_syntax;
+
+extern crate hprof;
 
 
 pub mod reader;
