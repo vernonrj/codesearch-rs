@@ -1,6 +1,8 @@
-use std::error;
+use std::error::{self, Error};
 use std::fmt;
-use std::io::{self, Error};
+use std::io;
+
+use index::byteorder;
 
 #[derive(Debug)]
 pub struct IndexError {
@@ -11,6 +13,8 @@ pub struct IndexError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexErrorKind {
     IoError(io::ErrorKind),
+    ByteorderError,
+    FileNameError,
     FileTooLong,
     LineTooLong,
     TooManyTrigrams,
@@ -42,6 +46,18 @@ impl From<io::Error> for IndexError {
     }
 }
 
+impl From<byteorder::Error> for IndexError {
+    fn from(e: byteorder::Error) -> Self {
+        match e {
+            byteorder::Error::Io(err) => IndexError::from(err),
+            err @ _ => IndexError {
+                kind: IndexErrorKind::ByteorderError,
+                error: Box::new(err)
+            }
+        }
+    }
+}
+
 impl From<IndexError> for io::Error {
     fn from(e: IndexError) -> Self {
         match e.kind() {
@@ -53,10 +69,12 @@ impl From<IndexError> for io::Error {
     }
 }
 
-impl error::Error for IndexError {
+impl Error for IndexError {
     fn description(&self) -> &str {
         match self.kind {
             IndexErrorKind::IoError(_) => self.error.description(),
+            IndexErrorKind::ByteorderError => self.error.description(),
+            IndexErrorKind::FileNameError => "filename conversion error",
             IndexErrorKind::FileTooLong => "file too long",
             IndexErrorKind::LineTooLong => "line too long",
             IndexErrorKind::TooManyTrigrams => "too many trigrams in file",

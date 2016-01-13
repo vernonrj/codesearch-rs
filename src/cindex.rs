@@ -235,14 +235,14 @@ With no path arguments, cindex -reset removes the index.")
         if let Some(b) = get_value_from_matches::<u64>(&matches, "MAX_LINE_LEN_BYTES") {
             i.max_line_len = b;
         }
-        i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string).collect());
+        i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string));
         while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {
                 match i.add_file(&f) {
                     Ok(_) => (),
                     Err(ref e) => {
                         match e.kind() {
-                            IndexErrorKind::IoError(_) => panic!("I/O Error"),
+                            IndexErrorKind::IoError(_) => panic!("{}: {}", Path::new(&f).display(), e),
                             _ => {
                                 if log_skipped {
                                     warn!("{:?}: skipped. {}", f, e);
@@ -256,7 +256,7 @@ With no path arguments, cindex -reset removes the index.")
             }
         }
         info!("flush index");
-        i.flush().unwrap();
+        i.flush().expect("failed to flush index to disk");
     });
 
     for p in paths {

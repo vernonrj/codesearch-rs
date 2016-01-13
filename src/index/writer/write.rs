@@ -93,15 +93,15 @@ impl IndexWriter {
             index: BufWriter::with_capacity(256 << 10, f)
         }
     }
-    pub fn add_paths(&mut self, paths: Vec<OsString>) {
+    pub fn add_paths<I: IntoIterator<Item=OsString>>(&mut self, paths: I) {
         self.paths.extend(paths);
     }
-    pub fn add_file(&mut self, filename: &OsString) -> IndexResult<()> {
-        let f = try!(File::open(filename));
+    pub fn add_file<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<()> {
+        let f = try!(File::open(filename.as_ref()));
         let metadata = try!(f.metadata());
         self.add(filename, f, metadata.len())
     }
-    fn add(&mut self, filename: &OsString, f: File, size: u64) -> IndexResult<()> {
+    fn add<P: AsRef<Path>>(&mut self, filename: P, f: File, size: u64) -> IndexResult<()> {
         if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
                                        format!("file too long, ignoring ({} > {})",
@@ -118,7 +118,7 @@ impl IndexWriter {
                                                self.trigram.len(), self.max_trigram_count)));
 
         }
-        debug!("{} {} {:?}", size, self.trigram.len(), filename);
+        debug!("{} {} {:?}", size, self.trigram.len(), filename.as_ref());
         self.bytes_written += size as usize;
 
         let file_id = try!(self.add_name(filename));
@@ -132,43 +132,56 @@ impl IndexWriter {
         }
         Ok(())
     }
-    fn add_name(&mut self, filename: &OsString) -> IndexResult<u32> {
+    fn add_name<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<u32> {
         let offset = try!(get_offset(&mut self.name_data));
-        self.name_index.write_u32::<BigEndian>(offset as u32).unwrap();
-        let s = filename.to_str().expect("filename has invalid UTF-8 chars");
-        try!(self.name_data.write(s.as_bytes()));
+        try!(self.name_index.write_u32::<BigEndian>(offset as u32));
 
-        self.name_data.write_u8(0).unwrap();
+        let s = try!(filename
+                     .as_ref()
+                     .to_str()
+                     .ok_or(IndexError::new(IndexErrorKind::FileNameError,
+                                            "UTF-8 Conversion error")));
+        try!(self.name_data.write(s.as_bytes()));
+        try!(self.name_data.write_u8(0));
 
         let id = self.number_of_names_written;
         self.number_of_names_written += 1;
         Ok(id as u32)
     }
     pub fn flush(mut self) -> IndexResult<()> {
-        try!(self.add_name(&OsString::new()));
+        try!(self.add_name(""));
         try!(self.index.write(MAGIC.as_bytes()));
 
         let mut off = [0; 5];
         off[0] = try!(get_offset(&mut self.index));
 
         for p in &self.paths {
-            try!(self.index.write(p.to_str().unwrap().as_bytes()));
+            let path_as_bytes = try!(p.to_str()
+                                      .map(str::as_bytes)
+                                      .ok_or(IndexError::new(IndexErrorKind::FileNameError,
+                                                             "UTF-8 Conversion error")));
+            try!(self.index.write(path_as_bytes));
             try!(self.index.write("\0".as_bytes()));
         }
         try!(self.index.write("\0".as_bytes()));
         off[1] = try!(get_offset(&mut self.index));
+
         try!(self.name_data.flush());
         copy_file(&mut self.index, &mut self.name_data.get_mut());
         off[2] = try!(get_offset(&mut self.index));
+
         try!(self.merge_post());
         off[3] = try!(get_offset(&mut self.index));
+
         try!(self.name_index.flush());
         copy_file(&mut self.index, &mut self.name_index.get_mut());
         off[4] = try!(get_offset(&mut self.index));
+
         try!(self.post_index.flush());
         copy_file(&mut self.index, &mut self.post_index.get_mut());
+
         for v in off.iter() {
-            self.index.write_u32::<BigEndian>(*v as u32).unwrap();
+            try!(self.index.write_u32::<BigEndian>(*v as u32));
         }
         try!(self.index.write(TRAILER_MAGIC.as_bytes()));
         info!("{} data bytes, {} index bytes",
@@ -181,7 +194,7 @@ impl IndexWriter {
         info!("merge {} files + mem", self.post_files.len());
 
         for f in &self.post_files {
-            heap.add_file(f.deref()).unwrap();
+            try!(heap.add_file(f.deref()));
         }
         self.post.sort();
         let mut v = Vec::new();
@@ -189,20 +202,20 @@ impl IndexWriter {
         heap.add_mem(v);
 
         let mut h = heap.into_iter().peekable();
-        let offset0 = get_offset(&mut self.index).unwrap();
+        let offset0 = try!(get_offset(&mut self.index));
 
         while let Some(plist) = PostingList::aggregate_from(&mut h) {
-            let offset = get_offset(&mut self.index).unwrap() - offset0;
+            let offset = try!(get_offset(&mut self.index)) - offset0;
 
             // posting list
-            self.index.write_trigram(plist.trigram()).unwrap();
+            try!(self.index.write_trigram(plist.trigram()));
             for each_file in plist.iter_deltas() {
-                varint::write_uvarint(&mut self.index, each_file).unwrap();
+                try!(varint::write_uvarint(&mut self.index, each_file));
             }
 
-            self.post_index.write_trigram(plist.trigram()).unwrap();
-            self.post_index.write_u32::<BigEndian>(plist.delta_len() as u32).unwrap();
-            self.post_index.write_u32::<BigEndian>(offset as u32).unwrap();
+            try!(self.post_index.write_trigram(plist.trigram()));
+            try!(self.post_index.write_u32::<BigEndian>(plist.delta_len() as u32));
+            try!(self.post_index.write_u32::<BigEndian>(offset as u32));
         }
         Ok(())
     }
