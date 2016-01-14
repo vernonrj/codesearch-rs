@@ -213,7 +213,7 @@ impl IndexWriter {
         for f in &self.post_files {
             try!(heap.add_file(f.deref()));
         }
-        self.post.sort();
+        sort_post(&mut self.post);
         let mut v = Vec::new();
         mem::swap(&mut v, &mut self.post);
         heap.add_mem(v);
@@ -239,7 +239,7 @@ impl IndexWriter {
     }
     fn flush_post(&mut self) -> io::Result<()> {
         let _frame = profiling::profile("IndexWriter::flush_post");
-        self.post.sort();
+        sort_post(&mut self.post);
         let mut f = BufWriter::with_capacity(NPOST, try!(NamedTempFile::new()));
         debug!("flush {} entries to tempfile", self.post.len());
         for each in &self.post {
@@ -255,4 +255,49 @@ impl IndexWriter {
 fn make_temp_buf() -> BufWriter<TempFile> {
     let w = TempFile::new().expect("failed to make tempfile!");
     BufWriter::with_capacity(256 << 10, w)
+}
+
+const K: usize = 12;
+
+fn sort_post(post: &mut Vec<PostEntry>) {
+    let _frame = profiling::profile("sort_post");
+    let mut sort_tmp = Vec::<PostEntry>::with_capacity(post.len());
+    unsafe { sort_tmp.set_len(post.len()) };
+    let mut sort_n = [0; 1<<K];
+    for p in post.iter() {
+        let r = p.trigram() & ((1<<K) - 1);
+        sort_n[r as usize] += 1;
+    }
+    let mut tot = 0;
+    for count in sort_n.iter_mut() {
+        let val = *count;
+        *count = tot;
+        tot += val;
+    }
+    for p in post.iter() {
+        let r = (p.trigram() & ((1<<K) - 1)) as usize;
+        let o = sort_n[r];
+        sort_n[r] += 1;
+        sort_tmp[o] = *p;
+    }
+    mem::swap(post, &mut sort_tmp);
+
+    sort_n = [0; 1<<K];
+    for p in post.iter() {
+        let r = ((p.value() >> (32+K)) & ((1<<K) - 1)) as usize;
+        sort_n[r] += 1;
+    }
+    tot = 0;
+    for count in sort_n.iter_mut() {
+        let val = *count;
+        *count = tot;
+        tot += val;
+    }
+    for p in post.iter() {
+        let r = ((p.value() >> (32+K)) & ((1<<K) - 1)) as usize;
+        let o = sort_n[r];
+        sort_n[r] += 1;
+        sort_tmp[o] = *p;
+    }
+    mem::swap(post, &mut sort_tmp);
 }

@@ -9,6 +9,7 @@ use index::memmap::{Mmap, Protection};
 
 use super::NPOST;
 use super::postentry::PostEntry;
+use profiling;
 
 
 pub struct PostHeap {
@@ -28,6 +29,7 @@ impl PostHeap {
     }
     pub fn is_empty(&self) -> bool { self.ch.is_empty() }
     pub fn add_file(&mut self, f: &File) -> io::Result<()> {
+        let _frame = profiling::profile("PostHeap::add_file");
         let m = try!(Mmap::open(f, Protection::Read));
         let mut bytes = Cursor::new(unsafe { m.as_slice() });
         let mut ch = Vec::with_capacity(NPOST);
@@ -38,6 +40,7 @@ impl PostHeap {
         Ok(())
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
+        let _frame = profiling::profile("PostHeap::add_mem");
         self.ch.push(v.into_iter().peekable());
     }
 }
