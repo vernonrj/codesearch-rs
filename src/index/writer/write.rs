@@ -119,7 +119,7 @@ impl IndexWriter {
                 self.trigram.insert(each_trigram);
             }
             // drop(trigram_insert_frame);
-            if let Some(e) = trigrams.error() {
+            if let Some(e) = trigrams.take_error() {
                 return e;
             }
         }

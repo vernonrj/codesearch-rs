@@ -94,7 +94,7 @@ pub struct TrigramIter<'a, R: Read> {
 }
 
 impl<'a, R: Read> TrigramIter<'a, R> {
-    pub fn error(&mut self) -> Option<IndexResult<()>> {
+    pub fn take_error(&mut self) -> Option<IndexResult<()>> {
         self.error.take()
     }
     fn new(shared: &'a mut SharedBuffer,
