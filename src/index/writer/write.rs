@@ -14,7 +14,7 @@ use std::mem;
 use index::varint;
 use index::tempfile::{TempFile, NamedTempFile};
 use index::byteorder::{BigEndian, WriteBytesExt};
-// use index::hprof;
+use profiling;
 
 use index::{MAGIC, TRAILER_MAGIC};
 
@@ -75,6 +75,7 @@ pub struct IndexWriter {
 
 impl IndexWriter {
     pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
+        let _frame = profiling::profile("IndexWriter::new");
         let f = File::create(filename).expect("failed to make index!");
         IndexWriter {
             max_trigram_count: MAX_TEXT_TRIGRAMS,
@@ -98,13 +99,13 @@ impl IndexWriter {
         self.paths.extend(paths);
     }
     pub fn add_file<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<()> {
-        // let frame = hprof::enter("IndexWriter::add_file");
+        let _frame = profiling::profile("IndexWriter::add_file");
         let f = try!(File::open(filename.as_ref()));
         let metadata = try!(f.metadata());
         self.add(filename, f, metadata.len())
     }
     fn add<P: AsRef<Path>>(&mut self, filename: P, f: File, size: u64) -> IndexResult<()> {
-        // let frame = hprof::enter("IndexWriter::add");
+        let _frame = profiling::profile("IndexWriter::add");
         if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
                                        format!("file too long, ignoring ({} > {})",
@@ -114,11 +115,10 @@ impl IndexWriter {
         let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
         {
             let mut trigrams = self.trigram_reader.open(f, max_utf8_invalid, self.max_line_len);
-            // let trigram_insert_frame = hprof::enter("IndexWriter::add: Insert Trigrams");
+            let _trigram_insert_frame = profiling::profile("IndexWriter::add: Insert Trigrams");
             while let Some(each_trigram) = trigrams.next() {
                 self.trigram.insert(each_trigram);
             }
-            // drop(trigram_insert_frame);
             if let Some(e) = trigrams.take_error() {
                 return e;
             }
@@ -137,7 +137,7 @@ impl IndexWriter {
         self.push_trigrams_to_post(file_id, v)
     }
     fn push_trigrams_to_post(&mut self, file_id: u32, trigrams: Vec<u32>) -> IndexResult<()> {
-        // let frame = hprof::enter("IndexWriter::push_trigrams_to_post");
+        let _frame = profiling::profile("IndexWriter::push_trigrams_to_post");
         for each_trigram in trigrams {
             if self.post.len() >= NPOST {
                 try!(self.flush_post());
@@ -147,7 +147,7 @@ impl IndexWriter {
         Ok(())
     }
     fn add_name<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<u32> {
-        // let frame = hprof::enter("IndexWriter::add_name");
+        let _frame = profiling::profile("IndexWriter::add_name");
         let offset = try!(get_offset(&mut self.name_data));
         try!(self.name_index.write_u32::<BigEndian>(offset as u32));
 
@@ -164,6 +164,7 @@ impl IndexWriter {
         Ok(id as u32)
     }
     pub fn flush(mut self) -> IndexResult<()> {
+        let _frame = profiling::profile("IndexWriter::flush");
         try!(self.add_name(""));
         try!(self.index.write(MAGIC.as_bytes()));
 
@@ -202,10 +203,10 @@ impl IndexWriter {
         info!("{} data bytes, {} index bytes",
               self.bytes_written,
               try!(get_offset(&mut self.index)));
-        // hprof::profiler().print_timing();
         Ok(())
     }
     fn merge_post(&mut self) -> io::Result<()> {
+        let _frame = profiling::profile("IndexWriter::merge_post");
         let mut heap = PostHeap::new();
         info!("merge {} files + mem", self.post_files.len());
 
@@ -220,6 +221,7 @@ impl IndexWriter {
         let mut h = heap.into_iter().peekable();
         let offset0 = try!(get_offset(&mut self.index));
 
+        let _frame_write = profiling::profile("IndexWriter::merge_post: Write to post_index");
         while let Some(plist) = PostingList::aggregate_from(&mut h) {
             let offset = try!(get_offset(&mut self.index)) - offset0;
 
@@ -236,6 +238,7 @@ impl IndexWriter {
         Ok(())
     }
     fn flush_post(&mut self) -> io::Result<()> {
+        let _frame = profiling::profile("IndexWriter::flush_post");
         self.post.sort();
         let mut f = BufWriter::with_capacity(NPOST, try!(NamedTempFile::new()));
         debug!("flush {} entries to tempfile", self.post.len());

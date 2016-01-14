@@ -10,6 +10,7 @@ extern crate clap;
 extern crate log;
 
 mod customlogger;
+mod profiling;
 mod index;
 
 use index::reader::read::IndexReader;
@@ -236,6 +237,7 @@ With no path arguments, cindex -reset removes the index.")
             i.max_line_len = b;
         }
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string));
+        let _frame = profiling::profile("Index files");
         while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {
                 match i.add_file(&f) {
@@ -257,6 +259,8 @@ With no path arguments, cindex -reset removes the index.")
         }
         info!("flush index");
         i.flush().expect("failed to flush index to disk");
+        drop(_frame);
+        profiling::print_profiling();
     });
 
     for p in paths {
