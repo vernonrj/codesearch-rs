@@ -144,42 +144,45 @@ impl<'a, R: Read> Iterator for TrigramIter<'a, R> {
         self.current_value = ((1 << 24) - 1) & ((self.current_value << 8) | (c as u32));
         if self.num_read < 3 {
             return self.next();
-        } else {
-            let b1 = (self.current_value >> 8) & 0xff;
-            let b2 = self.current_value & 0xff;
-            if b1 == 0x00 || b2 == 0x00 {
-                // Binary file. Skip
-                self.error = Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
-                                                      format!("Binary File. Bytes {:02x}{:02x} at offset {}",
-                                                              b1, b2, self.num_read))));
-                None
-            } else if !valid_utf8(b1 as u8, b2 as u8) {
-                // invalid utf8 data
-                self.inv_cnt += 1;
-                if self.inv_cnt > self.max_invalid {
-                    self.error = Some(Err(IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
-                                                          format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
-                                                                  self.num_read, self.inv_cnt,
-                                                                  (self.inv_cnt as f64) / (self.num_read as f64)
-                                                                 ))));
-                    None
-                } else {
-                    return self.next();
-                }
-            } else if self.line_len > self.max_line_len {
-                self.error = Some(Err(IndexError::new(IndexErrorKind::LineTooLong,
-                                                      format!("Line too long ({} > {})",
-                                                      self.line_len, self.max_line_len))));
+        }
+
+        let b1 = ((self.current_value >> 8) & 0xff) as u8;
+        let b2 = (self.current_value & 0xff) as u8;
+        if b1 == 0x00 || b2 == 0x00 {
+            // Binary file. Skip
+            self.error = Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
+                                                  format!("Binary File. Bytes {:02x}{:02x} at offset {}",
+                                                          b1, b2, self.num_read))));
+            None
+        } else if !valid_utf8(b1, b2) {
+            // invalid utf8 data
+            self.inv_cnt += 1;
+            if self.inv_cnt > self.max_invalid {
+                let e = IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
+                                        format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
+                                                self.num_read, self.inv_cnt,
+                                                (self.inv_cnt as f64) / (self.num_read as f64)));
+                self.error = Some(Err(e));
                 None
             } else {
-                if c == ('\n' as u8) { 
-                    self.line_len = 0;
-                } else {
-                    self.line_len += 1;
-                }
-                Some(self.current_value)
+                // skip invalid character
+                self.next()
             }
+        } else if self.line_len > self.max_line_len {
+            let e = IndexError::new(IndexErrorKind::LineTooLong,
+                                    format!("Line too long ({} > {})",
+                                    self.line_len, self.max_line_len));
+            self.error = Some(Err(e));
+            None
+        } else {
+            if c == ('\n' as u8) { 
+                self.line_len = 0;
+            } else {
+                self.line_len += 1;
+            }
+            Some(self.current_value)
         }
+
     }
 }
 
