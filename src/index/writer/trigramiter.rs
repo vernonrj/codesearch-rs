@@ -205,14 +205,13 @@ fn test_trigram_iter_once() {
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
               | ('l' as u32);
-    assert!(c.unwrap() == hel);
+    assert!(c == hel);
 }
 
 #[test]
 pub fn test_trigram_iter() {
     let trigrams: Vec<u32> = TrigramReader::new()
         .open("hello".as_bytes(), 0, 100)
-        .map(Result::unwrap)
         .collect();
     let hel =   ('h' as u32) << 16
               | ('e' as u32) << 8
