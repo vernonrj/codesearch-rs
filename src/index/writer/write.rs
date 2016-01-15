@@ -1,5 +1,8 @@
-// Copyright 2015 Vernon Jones.
 // Original code Copyright 2011 The Go Authors.  All rights reserved.
+// Original Code Copyright 2013 Manpreet Singh ( junkblocker@yahoo.com ). All rights reserved.
+//
+// Copyright 2016 Vernon Jones. All rights reserved.
+//
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
