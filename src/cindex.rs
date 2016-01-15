@@ -10,11 +10,11 @@ extern crate clap;
 extern crate log;
 
 mod customlogger;
-mod profiling;
 mod index;
 
 use index::reader::read::IndexReader;
 use index::writer::{IndexWriter, IndexErrorKind};
+use index::profiling;
 use log::LogLevelFilter;
 
 use std::collections::HashSet;

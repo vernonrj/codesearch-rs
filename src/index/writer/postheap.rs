@@ -6,10 +6,10 @@ use std::vec;
 
 use index::byteorder::{BigEndian, ReadBytesExt};
 use index::memmap::{Mmap, Protection};
+use index::profiling;
 
 use super::NPOST;
 use super::postentry::PostEntry;
-use profiling;
 
 
 pub struct PostHeap {

@@ -14,7 +14,7 @@ use std::mem;
 use index::varint;
 use index::tempfile::{TempFile, NamedTempFile};
 use index::byteorder::{BigEndian, WriteBytesExt};
-use profiling;
+use index::profiling;
 
 use index::{MAGIC, TRAILER_MAGIC};
 

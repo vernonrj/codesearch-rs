@@ -13,6 +13,7 @@ extern crate hprof;
 pub mod reader;
 pub mod writer;
 pub mod merge;
+pub mod profiling;
 mod varint;
 
 use std::env;

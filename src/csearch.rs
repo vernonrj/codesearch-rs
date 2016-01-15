@@ -15,7 +15,6 @@ extern crate regex_syntax;
 mod customlogger;
 mod index;
 mod grep;
-mod profiling;
 
 use index::reader::regexp;
 use index::reader::read::IndexReader;
