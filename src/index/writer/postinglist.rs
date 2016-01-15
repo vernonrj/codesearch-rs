@@ -1,15 +1,15 @@
 // Implements a wrapper for the Posting List
 
-use std::iter::Peekable;
+use std::iter::{self, Chain, Once, Scan, Peekable};
 use std::num::Wrapping;
 use std::u32;
-use std::slice;
 use std::vec;
 
 
 use super::postentry::PostEntry;
+use profiling;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PostingList {
     trigram: u32,
     deltas: DeltaList
@@ -26,11 +26,12 @@ impl PostingList {
         self.deltas.push(file_id);
     }
     pub fn trigram(&self) -> u32 { self.trigram }
-    pub fn iter_deltas<'a>(&'a self) -> DeltaIter<'a> { self.deltas.iter() }
+    pub fn into_deltas(self) -> IntoDeltaIter { self.deltas.into_iter() }
     pub fn delta_len(&self) -> usize { self.deltas.len() }
     pub fn aggregate_from<I>(peekable: &mut Peekable<I>) -> Option<Self>
         where I: Iterator<Item=PostEntry>
     {
+        let _frame = profiling::profile("PostingList::aggregate_from");
         let mut plist = if let Some(pentry) = peekable.next() {
             PostingList {
                 trigram: pentry.trigram(),
@@ -39,6 +40,7 @@ impl PostingList {
         } else {
             return None;
         };
+        let _frame_get_posting_list = profiling::profile("PostingList::aggregate_from: Get posting list");
         loop {
             if peekable.peek().map(|p| p.trigram() == plist.trigram).unwrap_or(false) {
                 let pentry: PostEntry = peekable.next().unwrap();
@@ -54,7 +56,7 @@ impl PostingList {
 
 
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DeltaList {
     file_ids: Vec<u32>
 }
@@ -69,7 +71,6 @@ impl DeltaList {
         self.file_ids.push(file_id);
     }
     pub fn len(&self) -> usize { self.file_ids.len() }
-    pub fn iter<'a>(&'a self) -> DeltaIter<'a> { DeltaIter::new(self.file_ids.iter()) }
 }
 
 impl IntoIterator for DeltaList {
@@ -84,84 +85,30 @@ impl IntoIterator for DeltaList {
 
 
 
-struct Transformer {
-    last_value: u32
-}
-
-impl Transformer {
-    pub fn new() -> Self {
-        Transformer {
-            last_value: u32::MAX
-        }
-    }
-    pub fn next_value(&mut self, value: u32) -> u32 {
-        let Wrapping(diff) = Wrapping(value) - Wrapping(self.last_value);
-        self.last_value = value;
-        diff
-    }
-}
-
-pub struct DeltaIter<'a> {
-    inner: slice::Iter<'a, u32>,
-    delta: Transformer,
-    wrote_trailing_zero: bool
-}
-
-impl<'a> DeltaIter<'a> {
-    pub fn new(inner: slice::Iter<'a, u32>) -> Self {
-        DeltaIter {
-            inner: inner,
-            delta: Transformer::new(),
-            wrote_trailing_zero: false
-        }
-    }
-}
-
-impl<'a> Iterator for DeltaIter<'a> {
-    type Item = u32;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-            .map(|i| self.delta.next_value(*i))
-            .or_else(|| {
-                if !self.wrote_trailing_zero {
-                    self.wrote_trailing_zero = true;
-                    Some(0)
-                } else {
-                    None
-                }
-            })
-    }
-}
-
 pub struct IntoDeltaIter {
-    inner: vec::IntoIter<u32>,
-    delta: Transformer,
-    wrote_trailing_zero: bool
+    inner: Chain<Scan<vec::IntoIter<u32>, u32, fn(&mut u32, u32) -> Option<u32>>, Once<u32>>
 }
 
 impl IntoDeltaIter {
     pub fn new(inner: vec::IntoIter<u32>) -> Self {
+        let f: fn(&mut u32, u32) -> Option<u32> = transform;
+        let c = inner.scan(u32::MAX, f).chain(iter::once(0));;
         IntoDeltaIter {
-            inner: inner,
-            delta: Transformer::new(),
-            wrote_trailing_zero: false
+            inner: c
         }
     }
+}
+
+fn transform(delta: &mut u32, x: u32) -> Option<u32> {
+    let Wrapping(diff) = Wrapping(x) - Wrapping(*delta);
+    *delta = x;
+    Some(diff)
 }
 
 impl Iterator for IntoDeltaIter {
     type Item = u32;
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
-            .map(|i| self.delta.next_value(i))
-            .or_else(|| {
-                if !self.wrote_trailing_zero {
-                    self.wrote_trailing_zero = true;
-                    Some(0)
-                } else {
-                    None
-                }
-            })
     }
 }
 
@@ -171,16 +118,16 @@ fn test_into_iter() {
     let p = DeltaList::new(vec![1, 6, 7, 8]);
     let result = p.into_iter().collect::<Vec<_>>();
     println!("result = {:?}", result);
-    assert!(result == vec![2, 5, 1, 1, 0]);
+    assert_eq!(result, vec![2, 5, 1, 1, 0]);
 }
 
 #[test]
 fn test_iter() {
     let p = DeltaList::new(vec![1, 6, 7, 8]);
-    println!("vals = {:?}", p.iter().collect::<Vec<_>>());
-    assert!(p.iter().collect::<Vec<_>>() == vec![2, 5, 1, 1, 0]);
+    println!("vals = {:?}", p.clone().into_iter().collect::<Vec<_>>());
+    assert_eq!(p.clone().into_iter().collect::<Vec<_>>(), vec![2, 5, 1, 1, 0]);
     // make sure ownership works correctly
-    assert!(p.iter().collect::<Vec<_>>() == vec![2, 5, 1, 1, 0]);
+    assert_eq!(p.into_iter().collect::<Vec<_>>(), vec![2, 5, 1, 1, 0]);
 }
 
 #[test]
@@ -195,6 +142,6 @@ fn test_from_aggregate() {
     assert!(it.next() == Some(PostEntry::new(0x001122, 7)));
     assert!(it.next().is_none());
 
-    println!("{:?}", plist.iter_deltas().collect::<Vec<_>>());
-    assert!(plist.iter_deltas().collect::<Vec<_>>() == vec![2, 5, 0]);
+    println!("{:?}", plist.clone().into_deltas().collect::<Vec<_>>());
+    assert_eq!(plist.into_deltas().collect::<Vec<_>>(), vec![2, 5, 0]);
 }

@@ -221,18 +221,22 @@ impl IndexWriter {
         let mut h = heap.into_iter().peekable();
         let offset0 = try!(get_offset(&mut self.index));
 
-        let _frame_write = profiling::profile("IndexWriter::merge_post: Write to post_index");
+        let _frame_write = profiling::profile("IndexWriter::merge_post: Generate/Write post index");
         while let Some(plist) = PostingList::aggregate_from(&mut h) {
+            let _fname_write_to_index = profiling::profile("IndexWriter::merge_post: Write post index");
             let offset = try!(get_offset(&mut self.index)) - offset0;
 
             // posting list
-            try!(self.index.write_trigram(plist.trigram()));
-            for each_file in plist.iter_deltas() {
+            let plist_trigram = plist.trigram();
+            try!(self.index.write_trigram(plist_trigram));
+            let mut written = 0;
+            for each_file in plist.into_deltas() {
                 try!(varint::write_uvarint(&mut self.index, each_file));
+                written += 1;
             }
 
-            try!(self.post_index.write_trigram(plist.trigram()));
-            try!(self.post_index.write_u32::<BigEndian>(plist.delta_len() as u32));
+            try!(self.post_index.write_trigram(plist_trigram));
+            try!(self.post_index.write_u32::<BigEndian>(written - 1));
             try!(self.post_index.write_u32::<BigEndian>(offset as u32));
         }
         Ok(())
@@ -300,4 +304,14 @@ fn sort_post(post: &mut Vec<PostEntry>) {
         sort_tmp[o] = *p;
     }
     mem::swap(post, &mut sort_tmp);
+}
+
+#[test]
+fn test_sort() {
+    let mut v = vec![PostEntry::new(5, 0), PostEntry::new(1, 0), PostEntry::new(10, 0),
+                     PostEntry::new(4, 1), PostEntry::new(4, 5), PostEntry::new(5, 10)];
+    let mut v_1 = v.clone();
+    v_1.sort();
+    sort_post(&mut v);
+    assert_eq!(v, v_1);
 }
