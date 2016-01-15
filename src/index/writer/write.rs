@@ -59,7 +59,6 @@ pub struct IndexWriter {
 
     name_data: BufWriter<TempFile>,
     name_index: BufWriter<TempFile>,
-    trigram_reader: TrigramReader,
 
     trigram: SparseSet,
 
@@ -85,7 +84,6 @@ impl IndexWriter {
             paths: Vec::new(),
             name_data: make_temp_buf(),
             name_index: make_temp_buf(),
-            trigram_reader: TrigramReader::new(),
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
@@ -114,7 +112,7 @@ impl IndexWriter {
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
         {
-            let mut trigrams = self.trigram_reader.open(f, max_utf8_invalid, self.max_line_len);
+            let mut trigrams = TrigramReader::new(f, max_utf8_invalid, self.max_line_len);
             let _trigram_insert_frame = profiling::profile("IndexWriter::add: Insert Trigrams");
             while let Some(each_trigram) = trigrams.next() {
                 self.trigram.insert(each_trigram);
