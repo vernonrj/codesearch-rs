@@ -21,7 +21,7 @@ use index::{MAGIC, TRAILER_MAGIC};
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};
 use super::{WriteTrigram, copy_file, get_offset};
-use super::postinglist::PostingList;
+use super::postinglist::{to_diffs, TakeWhilePeek};
 use super::postentry::PostEntry;
 use super::postheap::PostHeap;
 use super::trigramiter::TrigramReader;
@@ -222,7 +222,7 @@ impl IndexWriter {
         let offset0 = try!(get_offset(&mut self.index));
 
         let _frame_write = profiling::profile("IndexWriter::merge_post: Generate/Write post index");
-        while let Some(plist) = PostingList::aggregate_from(&mut h) {
+        while let Some(plist) = TakeWhilePeek::new(&mut h) {
             let _fname_write_to_index = profiling::profile("IndexWriter::merge_post: Write post index");
             let offset = try!(get_offset(&mut self.index)) - offset0;
 
@@ -230,7 +230,7 @@ impl IndexWriter {
             let plist_trigram = plist.trigram();
             try!(self.index.write_trigram(plist_trigram));
             let mut written = 0;
-            for each_file in plist.into_deltas() {
+            for each_file in to_diffs(plist.map(|p| p.file_id())) {
                 try!(varint::write_uvarint(&mut self.index, each_file));
                 written += 1;
             }
