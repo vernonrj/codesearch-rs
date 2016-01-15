@@ -12,6 +12,7 @@ mod postinglist;
 mod postentry;
 mod postheap;
 mod trigramiter;
+mod sort_post;
 
 const NPOST: usize = (64 << 20) / 8;
 
