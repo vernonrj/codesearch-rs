@@ -209,12 +209,13 @@ With no path arguments, cindex -reset removes the index.")
         .collect();
     paths.sort();
 
-    let mut needs_merge = false;
     let mut index_path = index::csearch_index();
-    if Path::new(&index_path).exists() {
-        needs_merge = true;
+    let needs_merge = if Path::new(&index_path).exists() {
         index_path.push('~');
-    }
+        true
+    } else {
+        false
+    };
 
     let (tx, rx) = mpsc::channel::<OsString>();
     // copying these variables into the worker thread

@@ -21,9 +21,7 @@ impl<R: Read> TrigramReader<R> {
     pub fn take_error(&mut self) -> Option<IndexResult<()>> {
         self.error.take()
     }
-    pub fn new(r: R,
-           max_invalid: u64,
-           max_line_len: u64) -> TrigramReader<R> {
+    pub fn new(r: R, max_invalid: u64, max_line_len: u64) -> TrigramReader<R> {
         TrigramReader {
             reader: BufReader::with_capacity(16384, r).bytes(),
             current_value: 0,
@@ -55,14 +53,11 @@ impl<R: Read> Iterator for TrigramReader<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
             Some(c) => c,
-            _ => {
-                return if self.num_read > 0 && self.num_read < 3 {
-                    self.num_read = 0;
-                    return Some(self.current_value);
-                } else {
-                    return None;
-                };
-            }
+            None if self.num_read > 0 && self.num_read < 3 => {
+                self.num_read = 0;
+                return Some(self.current_value);
+            },
+            _ => return None
         };
         self.current_value = ((1 << 24) - 1) & ((self.current_value << 8) | (c as u32));
         if self.num_read < 3 {
