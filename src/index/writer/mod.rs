@@ -19,7 +19,7 @@ mod postheap;
 mod trigramiter;
 mod sort_post;
 
-const NPOST: usize = (64 << 20) / 8;
+const NPOST: usize = (64 << 20) / 8; // 64 MB worth of post entries
 
 pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
     seekable.seek(SeekFrom::Current(0))

@@ -284,6 +284,7 @@ With no path arguments, cindex -reset removes the index.")
     }
 
     info!("done");
+    profiling::print_profiling();
 }
 
 fn open_index_or_fail() -> IndexReader {
