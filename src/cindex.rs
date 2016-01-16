@@ -224,7 +224,10 @@ With no path arguments, cindex -reset removes the index.")
     let log_skipped = matches.is_present("logskip");
     let h = thread::spawn(move || {
         let mut seen = HashSet::<OsString>::new();
-        let mut i = IndexWriter::new(index_path_cloned);
+        let mut i = match IndexWriter::new(index_path_cloned) {
+            Ok(i) => i,
+            Err(e) => panic!("IndexWriter: {}", e)
+        };
         if let Some(t) = get_value_from_matches::<u64>(&matches, "MAX_TRIGRAMS_COUNT") {
             i.max_trigram_count = t;
         }

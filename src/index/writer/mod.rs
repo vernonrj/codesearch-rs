@@ -21,10 +21,12 @@ mod sort_post;
 
 const NPOST: usize = (64 << 20) / 8; // 64 MB worth of post entries
 
+/// Returns the offset in a seekable object.
 pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
     seekable.seek(SeekFrom::Current(0))
 }
 
+/// Copies the data from a reader into a writer
 pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R) {
     src.seek(SeekFrom::Start(0)).unwrap();
     let mut buf_src = BufReader::new(src); 
@@ -43,7 +45,11 @@ pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R)
 }
 
 
+/// Used for writing trigrams
 pub trait WriteTrigram: Write {
+    /// Write a trigram to a stream
+    ///
+    /// Writes 24 bits of `t` into the stream
     fn write_trigram(&mut self, t: u32) -> io::Result<()> {
         let mut buf: [u8; 3] = [((t >> 16) & 0xff) as u8,
                                 ((t >> 8) & 0xff) as u8,

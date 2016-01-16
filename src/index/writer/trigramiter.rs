@@ -3,6 +3,25 @@ use std::io::{self, Read, BufReader};
 use super::error::{IndexResult, IndexError, IndexErrorKind};
 
 
+/// Yields 24-bit trigrams of characters from a reader
+///
+/// The Iterator interface is implemented to allow iteration over the trigrams.
+/// The `.next()` method has a slight quirk, in that if an error occurs, iteration
+/// stops immediately and the error is stored in an internal variable that can be
+/// queried by the `.error()` method. This is because this iteration is a fairly
+/// tight loop, and flattening the return of the `.next()` method from
+/// `Option<Result<u32>>` to `Option<u32>` resulted in a respectable speedup.
+///
+///
+/// ```
+/// # use self::TrigramReader;
+/// # fn main() {
+/// let buf = "hello".as_bytes();
+/// let mut tr = TrigramReader::new(buf, 0, 100);
+/// assert_eq!(tr.next(), ('h' as u32) << 16 | ('e' as u32) << 8 | ('l' as u32));
+/// assert!(tr.take_error().is_none());
+/// # }
+/// ```
 pub struct TrigramReader<R: Read> {
     reader: io::Bytes<BufReader<R>>,
     current_value: u32,
@@ -18,9 +37,15 @@ pub struct TrigramReader<R: Read> {
 }
 
 impl<R: Read> TrigramReader<R> {
+    /// If an error occurred during reading, extracts it into an option
     pub fn take_error(&mut self) -> Option<IndexResult<()>> {
         self.error.take()
     }
+    /// Creates a new object
+    ///
+    /// ```
+    /// let tr = TrigramReader::new("test".as_bytes(), 0, 100);
+    /// ```
     pub fn new(r: R, max_invalid: u64, max_line_len: u64) -> TrigramReader<R> {
         TrigramReader {
             reader: BufReader::with_capacity(16384, r).bytes(),

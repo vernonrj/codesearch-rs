@@ -4,6 +4,10 @@ use std::io;
 
 use index::byteorder;
 
+/// The Error type for indexing operations.
+///
+/// Errors can come from std::io::Error, byteorder::Error, or
+/// from indexing a file.
 #[derive(Debug)]
 pub struct IndexError {
     kind: IndexErrorKind,
@@ -12,18 +16,41 @@ pub struct IndexError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexErrorKind {
+    /// A read error returned from a std::io function
     IoError(io::ErrorKind),
+    /// An error returned by a byteorder method
     ByteorderError,
+    /// Indicates a filename isn't valid utf-8
     FileNameError,
+    /// The file is longer than the specified max size
     FileTooLong,
+    /// A line in the current file is longer than the specified max size
     LineTooLong,
+    /// The number of trigrams in the read file exceeded the max number
+    /// of trigrams
     TooManyTrigrams,
+    /// Binary data is present in file (binary files are skipped)
     BinaryDataPresent,
+    /// The ratio of invalid utf-8 : valid utf-8 chars is too high
     HighInvalidUtf8Ratio
 }
 
 
 impl IndexError {
+    /// Creates a new IndexError. Works the same as std::io::Error.
+    ///
+    /// ```
+    /// # use self::{IndexError, IndexErrorKind};
+    /// // IndexError can be created from io::Error
+    /// fn try_something() -> IndexError<()> {
+    ///     // like std::io::Error, IndexError can be created from strings
+    ///     let custom_error = IndexError::new(IndexErrorKind::LineTooLong, "oh no!");
+    ///     let mut b: [u8; 10] = [0; 10];
+    ///     // std::io::Error can be cast to IndexError in a try! macro
+    ///     try!(b.write(b"some bytes"));
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new<E>(kind: IndexErrorKind, error: E) -> IndexError
         where E: Into<Box<error::Error + Send + Sync>>
     {
@@ -32,6 +59,7 @@ impl IndexError {
             error: error.into()
         }
     }
+    /// Returns the type of the error
     pub fn kind(&self) -> IndexErrorKind {
         self.kind.clone()
     }
@@ -91,5 +119,9 @@ impl fmt::Display for IndexError {
 }
 
 
+/// A specialized result type for Index operations.
+/// 
+/// Behaves similarly to std::io::Result
+///
 pub type IndexResult<T> = Result<T, IndexError>;
 

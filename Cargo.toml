@@ -3,15 +3,6 @@ name = "codesearch-rs"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
-[profile.dev]
-opt-level = 0
-debug = true
-
-[profile.release]
-opt-level = 3
-debug = false
-debug-assertions = false
-
 [dependencies]
 byteorder = "0.4.2"
 chrono = "0.2"
@@ -31,6 +22,7 @@ profile = []
 [[bin]]
 name = "csearch"
 path = "src/csearch.rs"
+doctest = true
 
 [[bin]]
 name = "cindex"

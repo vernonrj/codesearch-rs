@@ -53,10 +53,31 @@ const MAX_INVALID_UTF8_RATION: f64 = 0.1;
 const MAX_LINE_LEN: u64 = 2000;
 
 
+/**
+ * Creates an index
+ *
+ * ```no_run
+ * # use index::writer::write::IndexWriter;
+ * # fn main() {
+ * let mut index_writer = IndexWriter::new("index").unwrap();
+ * index_writer.add_paths("/path/to/be/indexed").unwrap();
+ *
+ * for each_file in walk_dir("/path/to/be/indexed") {
+ *     index_writer.add_file(each_file).unwrap();
+ * }
+ * index_writer.flush().unwrap();
+ * # }
+ * ```
+ */
 pub struct IndexWriter {
+
+    /// Max number of allowed trigrams in a file
     pub max_trigram_count: u64,
+    /// Max percentage of invalid utf-8 sequences allowed
     pub max_utf8_invalid: f64,
+    /// Don't index a file if its size in bytes is larger than this
     pub max_file_len: u64,
+    /// Stop indexing a file if it has a line longer than this
     pub max_line_len: u64,
 
     paths: Vec<OsString>,
@@ -66,7 +87,9 @@ pub struct IndexWriter {
 
     trigram: SparseSet,
 
+    /// Tracks the number of names written to disk (used to assign file IDs)
     pub number_of_names_written: usize,
+    /// Tracks the total number of bytes written to index
     pub bytes_written: usize,
 
     post: Vec<PostEntry>,
@@ -77,35 +100,58 @@ pub struct IndexWriter {
 }
 
 impl IndexWriter {
-    pub fn new<P: AsRef<Path>>(filename: P) -> IndexWriter {
+    /// Creates a new index file at `filename`
+    ///
+    /// ```no_run
+    /// let index = IndexWriter::new("index").unwrap();
+    /// ```
+    pub fn new<P: AsRef<Path>>(filename: P) -> io::Result<IndexWriter> {
         let _frame = profiling::profile("IndexWriter::new");
-        let f = File::create(filename).expect("failed to make index!");
-        IndexWriter {
+        let f = try!(File::create(filename));
+        Ok(IndexWriter {
             max_trigram_count: MAX_TEXT_TRIGRAMS,
             max_utf8_invalid: MAX_INVALID_UTF8_RATION,
             max_file_len: MAX_FILE_LEN,
             max_line_len: MAX_LINE_LEN,
             paths: Vec::new(),
-            name_data: make_temp_buf(),
-            name_index: make_temp_buf(),
+            name_data: try!(make_temp_buf()),
+            name_index: try!(make_temp_buf()),
             trigram: SparseSet::new(),
             number_of_names_written: 0,
             bytes_written: 0,
             post: Vec::with_capacity(NPOST),
             post_files: Vec::new(),
-            post_index: make_temp_buf(),
+            post_index: try!(make_temp_buf()),
             index: BufWriter::with_capacity(256 << 10, f)
-        }
+        })
     }
+
+    /// Add the specified paths to the index.
+    /// Note that this only writes the names of the paths into
+    /// the index, it doesn't actually walk those directories.
+    /// See `IndexWriter::add_file` for that.
     pub fn add_paths<I: IntoIterator<Item=OsString>>(&mut self, paths: I) {
         self.paths.extend(paths);
     }
+
+    /// Open a file and index it
+    ///
+    /// ```no_run
+    /// let mut index = IndexWriter::open("index");
+    /// index.add_file("/path/to/file").unwrap();
+    /// index.flush().unwrap();
+    /// ```
     pub fn add_file<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<()> {
         let _frame = profiling::profile("IndexWriter::add_file");
         let f = try!(File::open(filename.as_ref()));
         let metadata = try!(f.metadata());
         self.add(filename, f, metadata.len())
     }
+
+    /// Indexes a file
+    ///
+    /// `filename` is the name of the opened file referred to by `f`.
+    /// `size` is the size of the file referred to by `f`.
     fn add<P: AsRef<Path>>(&mut self, filename: P, f: File, size: u64) -> IndexResult<()> {
         let _frame = profiling::profile("IndexWriter::add");
         if size > self.max_file_len {
@@ -138,6 +184,9 @@ impl IndexWriter {
         let v = self.trigram.take_dense();
         self.push_trigrams_to_post(file_id, v)
     }
+
+    /// Take trigrams in `trigams` and push them to the post list,
+    /// possibly flushing them to file.
     fn push_trigrams_to_post(&mut self, file_id: u32, trigrams: Vec<u32>) -> IndexResult<()> {
         let _frame = profiling::profile("IndexWriter::push_trigrams_to_post");
         for each_trigram in trigrams {
@@ -148,6 +197,8 @@ impl IndexWriter {
         }
         Ok(())
     }
+
+    /// Add `filename` to the nameData section of the index
     fn add_name<P: AsRef<Path>>(&mut self, filename: P) -> IndexResult<u32> {
         let _frame = profiling::profile("IndexWriter::add_name");
         let offset = try!(get_offset(&mut self.name_data));
@@ -165,6 +216,8 @@ impl IndexWriter {
         self.number_of_names_written += 1;
         Ok(id as u32)
     }
+
+    /// Finalize the index, collecting all data and writing it out.
     pub fn flush(mut self) -> IndexResult<()> {
         let _frame = profiling::profile("IndexWriter::flush");
         try!(self.add_name(""));
@@ -207,6 +260,7 @@ impl IndexWriter {
               try!(get_offset(&mut self.index)));
         Ok(())
     }
+    /// Merge the posting lists together
     fn merge_post(&mut self) -> io::Result<()> {
         let _frame = profiling::profile("IndexWriter::merge_post");
         let mut heap = PostHeap::new();
@@ -243,6 +297,8 @@ impl IndexWriter {
         }
         Ok(())
     }
+
+    /// Flush the post data to a temporary file
     fn flush_post(&mut self) -> io::Result<()> {
         let _frame = profiling::profile("IndexWriter::flush_post");
         sort_post(&mut self.post);
@@ -258,9 +314,9 @@ impl IndexWriter {
     }
 }
 
-fn make_temp_buf() -> BufWriter<TempFile> {
-    let w = TempFile::new().expect("failed to make tempfile!");
-    BufWriter::with_capacity(256 << 10, w)
+fn make_temp_buf() -> io::Result<BufWriter<TempFile>> {
+    let w = try!(TempFile::new());
+    Ok(BufWriter::with_capacity(256 << 10, w))
 }
 
 

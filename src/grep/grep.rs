@@ -14,11 +14,10 @@ use std::path::Path;
  * an iterator for walking over matches in a file.
  *
  * ```no_run
- * # extern crate codesearch_lib;
  * # extern crate regex;
  * # use regex::Regex;
- * # use codesearch_lib::grep::grep::Grep;
- * # use codesearch_lib::grep::grep::GrepIter;
+ * # use grep::grep::Grep;
+ * # use grep::grep::GrepIter;
  * # use std::io;
  * # fn main() { foo(); }
  * # fn foo() -> io::Result<()> {
