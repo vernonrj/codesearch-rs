@@ -88,15 +88,21 @@ empty, $HOME/.csearchindex.
              .help("use specified INDEX_FILE as the index path. overrides $CSEARCHINDEX."))
         .get_matches();
 
-    // get the pattern provided by the user
-    let mut pattern: String = matches.value_of("PATTERN").unwrap().to_string();
-    pattern = "(?m)".to_string() + &pattern;
-
     // possibly add ignore case flag to the pattern
     let ignore_case = matches.is_present("ignore-case");
-    if ignore_case {
-        pattern = "(?i)".to_string() + &pattern;
-    }
+
+    // get the pattern provided by the user
+    let pattern = {
+        let user_pattern = matches.value_of("PATTERN").expect("Failed to get PATTERN");
+
+        let ignore_case_flag = if ignore_case { "(?i)" } else { "" };
+        let multiline_flag = "(?m)";
+        String::from(ignore_case_flag) + multiline_flag + user_pattern
+    };
+    let regex_pattern = match regex::Regex::new(&pattern) {
+        Ok(r) => r,
+        Err(e) => panic!("PATTERN: {}", e)
+    };
 
     // possibly override the csearchindex
     matches.value_of("INDEX_FILE").map(|p| {
@@ -105,8 +111,7 @@ empty, $HOME/.csearchindex.
 
     // combine cmdline options used for matching/output into a structure
     let match_options = MatchOptions {
-        // TODO: Catch bad regex earlier, maybe print a nice message
-        pattern: regex::Regex::new(&pattern.clone()).expect("Invalid pattern supplied!"),
+        pattern: regex_pattern,
         print_count: matches.is_present("count"),
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
@@ -116,27 +121,32 @@ empty, $HOME/.csearchindex.
 
     // Get the index from file
     let index_path = index::csearch_index();
-    let i = IndexReader::open(index_path).unwrap();
+    let index_reader = match IndexReader::open(index_path) {
+        Ok(i) => i,
+        Err(e) => panic!("{}", e)
+    };
 
     // Find all possibly matching files using the pseudo-regexp
     let mut post = if matches.is_present("bruteforce") {
-        i.query(regexp::Query::all(), None)
+        index_reader.query(regexp::Query::all(), None)
     } else {
         // Get the pseudo-regexp (built using trigrams)
-        let expr = regex_syntax::Expr::parse(&pattern.clone()).unwrap();
+        let expr = regex_syntax::Expr::parse(&pattern).unwrap();
         let q = regexp::RegexInfo::new(&expr).query;
 
-        i.query(q, None)
+        index_reader.query(q, None)
     };
 
     // If provided, filter possibly matching files via FILE_PATTERN
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
-        let file_pattern = regex::Regex::new(&file_pattern_str)
-            .expect("Invalid file pattern supplied!");
-        post = post.iter().filter(|&file_id| {
-            let name = i.name(*file_id);
+        let file_pattern = match regex::Regex::new(&file_pattern_str) {
+            Ok(r) => r,
+            Err(e) => panic!("FILE_PATTERN: {}", e)
+        };
+        post = post.into_iter().filter(|file_id| {
+            let name = index_reader.name(*file_id);
             file_pattern.is_match(&name)
-        }).cloned().collect::<Vec<_>>();
+        }).collect::<Vec<_>>();
     }
 
     // Search all possibly matching files for matches, printing the matching lines
@@ -145,7 +155,7 @@ empty, $HOME/.csearchindex.
     let mut line_printer = LinePrinter::new(&match_options);
     let mut total_matches = 0;
     'files: for file_id in post {
-        let name = i.name(file_id);
+        let name = index_reader.name(file_id);
         let g_it = match g.open(name.clone()) {
             Ok(g_it) => g_it,
             Err(cause) => {
@@ -162,7 +172,7 @@ empty, $HOME/.csearchindex.
             }
             match line_printer.print_line(&name, &each_line) {
                 Ok(_) => (),
-                Err(_) => return
+                Err(_) => return    // return early if stdout is closed
             }
         }
     }
