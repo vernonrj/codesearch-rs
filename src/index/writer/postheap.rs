@@ -1,7 +1,5 @@
 use std::fs::File;
 use std::io::{self, Cursor};
-use std::iter::Peekable;
-use std::u64;
 use std::vec;
 
 use index::byteorder::{BigEndian, ReadBytesExt};
@@ -11,9 +9,59 @@ use index::profiling;
 use super::NPOST;
 use super::postentry::PostEntry;
 
+struct PostChunk {
+    e: PostEntry,
+    m: vec::IntoIter<PostEntry>,
+    size: usize
+}
+
+impl PostChunk {
+    pub fn new(v: Vec<PostEntry>) -> Option<PostChunk> {
+        let size = v.len();
+        if size == 0 {
+            None
+        } else {
+            let mut m = v.into_iter();
+            let e = m.next().unwrap();
+            Some(PostChunk {
+                e: e,
+                m: m,
+                size: size
+            })
+        }
+    }
+    pub fn peek<'a>(&'a self) -> &'a PostEntry {
+        debug_assert!(!self.is_empty());
+        &self.e
+    }
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+    pub fn len(&self) -> usize {
+        self.size
+    }
+}
+
+impl Iterator for PostChunk {
+    type Item = PostEntry;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            return None;
+        }
+        let result = self.e;
+        if let Some(c) = self.m.next() {
+            self.e = c;
+        }
+        self.size -= 1;
+        Some(result)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+}
 
 pub struct PostHeap {
-    ch: Vec<Peekable<vec::IntoIter<PostEntry>>>
+    ch: Vec<PostChunk>
 }
 
 impl PostHeap {
@@ -24,8 +72,8 @@ impl PostHeap {
     }
     pub fn len(&self) -> usize {
         self.ch.iter()
-            .map(|i| i.size_hint().0)
-            .fold(0, |a, b| a + b)
+               .map(PostChunk::len)
+               .fold(0, |a, b| a + b)
     }
     pub fn is_empty(&self) -> bool { self.ch.is_empty() }
     pub fn add_file(&mut self, f: &File) -> io::Result<()> {
@@ -36,12 +84,57 @@ impl PostHeap {
         while let Ok(p) = bytes.read_u64::<BigEndian>() {
             ch.push(PostEntry(p));
         }
-        self.ch.push(ch.into_iter().peekable());
+        self.add_mem(ch);
         Ok(())
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
         let _frame = profiling::profile("PostHeap::add_mem");
-        self.ch.push(v.into_iter().peekable());
+        if let Some(p) = PostChunk::new(v) {
+            self.add(p);
+        }
+    }
+    fn add(&mut self, ch: PostChunk) {
+        if !ch.is_empty() {
+            self.push(ch);
+        }
+    }
+    fn push(&mut self, ch: PostChunk) {
+        let n = self.ch.len();
+        self.ch.push(ch);
+        if self.ch.len() >= 2 {
+            self.sift_up(n);
+        }
+    }
+    fn sift_down(&mut self, mut i: usize) {
+        let mut ch = &mut self.ch;
+        let len = ch.len();
+        loop {
+            let j1 = 2*i + 1;
+            if j1 >= len {
+                break;
+            }
+            let j2 = j1 + 1;
+            let j = if j2 < len && ch[j1].e >= ch[j2].e {
+                j2
+            } else {
+                j1
+            };
+            if ch[i].e < ch[j].e {
+                break;
+            }
+            ch.swap(i, j);
+            i = j;
+        }
+    }
+    fn sift_up(&mut self, mut j: usize) {
+        loop {
+            let i = (j - 1) / 2;
+            if (i == j) || self.ch[i].e < self.ch[j].e {
+                break;
+            }
+            self.ch.swap(i, j);
+            j = i;
+        }
     }
 }
 
@@ -70,31 +163,17 @@ impl IntoIter {
 impl Iterator for IntoIter {
     type Item = PostEntry;
     fn next(&mut self) -> Option<Self::Item> {
-        let min_idx = if self.inner.ch.is_empty() {
-            return None;
-        } else if self.inner.ch.len() == 1 {
-            0
-        } else {
-            let mut min_idx = 0;
-            let mut min_val = PostEntry(u64::MAX);
-            for (each_idx, each_vec) in self.inner.ch.iter_mut().enumerate() {
-                let each_val = if let Some(each_val) = each_vec.peek() {
-                    each_val
-                } else {
-                    continue;
-                };
-                if *each_val < min_val {
-                    min_val = *each_val;
-                    min_idx = each_idx;
-                }
+        if !self.inner.ch.is_empty() {
+            let e = self.inner.ch[0].next();
+            if self.inner.ch[0].is_empty() {
+                self.inner.ch.remove(0).last();
+            } else {
+                self.inner.sift_down(0);
             }
-            min_idx
-        };
-        let min_val = self.inner.ch[min_idx].next().unwrap();
-        if self.inner.ch[min_idx].peek().is_none() {
-            self.inner.ch.remove(min_idx).last();
+            e
+        } else {
+            None
         }
-        Some(min_val)
     }
 }
 
@@ -115,7 +194,7 @@ mod tests {
         let mut p = PostHeap::new();
         p.add_mem(vec![PostEntry::new(0, 32),
                        PostEntry::new(5, 32)]);
-        assert!(p.len() == 2);
+        assert_eq!(p.len(), 2);
         assert!(!p.is_empty());
     }
 
@@ -140,7 +219,7 @@ mod tests {
         let mut p = PostHeap::new();
         p.add_mem(v1.clone());
         p.add_mem(v2.clone());
-        assert!(p.len() == v_comb.len());
+        assert_eq!(p.len(), v_comb.len());
         assert!(!p.is_empty());
         assert!(p.into_iter().collect::<Vec<_>>() == v_comb);
     }
