@@ -232,9 +232,9 @@ impl IndexWriter {
                                       .ok_or(IndexError::new(IndexErrorKind::FileNameError,
                                                              "UTF-8 Conversion error")));
             try!(self.index.write(path_as_bytes));
-            try!(self.index.write("\0".as_bytes()));
+            try!(self.index.write_u8(0));
         }
-        try!(self.index.write("\0".as_bytes()));
+        try!(self.index.write_u8(0));
         off[1] = try!(get_offset(&mut self.index));
 
         try!(self.name_data.flush());
@@ -286,15 +286,25 @@ impl IndexWriter {
             let plist_trigram = plist.trigram();
             try!(self.index.write_trigram(plist_trigram));
             let mut written = 0;
+            let _fname_diffs = profiling::profile("IndexWriter::merge_post: Write file diffs");
             for each_file in to_diffs(plist.map(|p| p.file_id())) {
                 try!(varint::write_uvarint(&mut self.index, each_file));
                 written += 1;
             }
+            drop(_fname_diffs);
 
+            let _fname_diffs = profiling::profile("IndexWriter::merge_post: Write file diffs");
             try!(self.post_index.write_trigram(plist_trigram));
             try!(self.post_index.write_u32::<BigEndian>(written - 1));
             try!(self.post_index.write_u32::<BigEndian>(offset as u32));
         }
+        // NOTE: write last entry like how the go version works
+        try!(self.index.write_trigram(0xffffff));           // END trigram
+        try!(varint::write_uvarint(&mut self.index, 0));    // NUL byte for END postlist
+        try!(self.post_index.write_trigram(0xffffff));      // END trigram
+        try!(self.post_index.write_u32::<BigEndian>(0));    // nothing written
+        try!(self.post_index.write_u32::<BigEndian>(0));    // offset = 0
+
         Ok(())
     }
 

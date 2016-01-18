@@ -3,7 +3,7 @@ pub struct PostEntry(pub u64);
 
 impl PostEntry {
     pub fn new(trigram: u32, file_id: u32) -> Self {
-        PostEntry((trigram as u64) << 32 | (file_id as u64))
+        PostEntry(((trigram as u64) << 32) | (file_id as u64))
     }
     pub fn trigram(&self) -> u32 {
         let &PostEntry(ref u) = self;
