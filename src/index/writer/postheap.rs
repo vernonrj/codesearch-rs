@@ -127,7 +127,7 @@ impl PostHeap {
         }
     }
     fn sift_up(&mut self, mut j: usize) {
-        loop {
+        while j > 0 {
             let i = (j - 1) / 2;
             if (i == j) || self.ch[i].e < self.ch[j].e {
                 break;
