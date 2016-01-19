@@ -2,6 +2,11 @@
 name = "codesearch-rs"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
+license = "BSD-3-Clause"
+description = "Tool for indexing then performing regular expression searches over large bodies of code"
+documentation = "https://github.com/vernonrj/codesearch-rs"
+homepage = "https://github.com/vernonrj/codesearch-rs"
+repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
 byteorder = "0.4.2"
