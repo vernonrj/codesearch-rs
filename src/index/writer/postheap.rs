@@ -142,20 +142,20 @@ impl IntoIterator for PostHeap {
     type Item = PostEntry;
     type IntoIter = IntoIter;
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter {
-            inner: self
-        }
+        IntoIter::new(self)
     }
 }
 
 pub struct IntoIter {
-    inner: PostHeap
+    inner: PostHeap,
+    place: usize
 }
 
 impl IntoIter {
     pub fn new(inner: PostHeap) -> Self {
         IntoIter {
-            inner: inner
+            inner: inner,
+            place: 0
         }
     }
 }
@@ -163,12 +163,12 @@ impl IntoIter {
 impl Iterator for IntoIter {
     type Item = PostEntry;
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.inner.ch.is_empty() {
-            let e = self.inner.ch[0].next();
-            if self.inner.ch[0].is_empty() {
-                self.inner.ch.remove(0).last();
+        if self.place < self.inner.ch.len() {
+            let e = self.inner.ch[self.place].next();
+            if self.inner.ch[self.place].is_empty() {
+                self.place += 1;
             } else {
-                self.inner.sift_down(0);
+                self.inner.sift_down(self.place);
             }
             e
         } else {

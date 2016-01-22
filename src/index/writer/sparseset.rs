@@ -5,6 +5,8 @@
 
 #![allow(dead_code)]
 use std::mem;
+use std::slice;
+use std::vec;
 
 const MAX_SIZE: u32 = 1 << 24;
 const STARTING_DENSE_SIZE: usize = 10000;
@@ -18,14 +20,12 @@ impl SparseSet {
     pub fn new() -> SparseSet {
         let mut v = Vec::with_capacity(MAX_SIZE as usize);
         unsafe { v.set_len(MAX_SIZE as usize) };
-        let s = SparseSet {
+        SparseSet {
             sparse: v,
             dense: Vec::with_capacity(STARTING_DENSE_SIZE)
-        };
-        s
+        }
     }
     pub fn insert(&mut self, x: u32) {
-        debug_assert!((x as usize) < self.sparse.len());
         let v = self.sparse[x as usize];
         let n = self.dense.len();
         if (v as usize) < n && self.dense[v as usize] == x {
@@ -35,9 +35,6 @@ impl SparseSet {
         self.dense.push(x);
     }
     pub fn contains(&self, x: u32) -> bool {
-        if (x as usize) >= self.sparse.len() {
-            warn!("value {} too large to be contained in sparse set", x);
-        }
         let v = self.sparse[x as usize];
         v < (self.dense.len() as u32) && self.dense[v as usize] == x
     }
@@ -56,7 +53,7 @@ impl SparseSet {
 
 impl IntoIterator for SparseSet {
     type Item = u32;
-    type IntoIter = ::std::vec::IntoIter<u32>;
+    type IntoIter = vec::IntoIter<u32>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.dense.into_iter()
@@ -65,9 +62,9 @@ impl IntoIterator for SparseSet {
 
 impl<'a> IntoIterator for &'a SparseSet {
     type Item = &'a u32;
-    type IntoIter = ::std::slice::Iter<'a, u32>;
+    type IntoIter = slice::Iter<'a, u32>;
 
-    fn into_iter(self) -> ::std::slice::Iter<'a, u32> {
+    fn into_iter(self) -> slice::Iter<'a, u32> {
         self.dense.iter()
     }
 
