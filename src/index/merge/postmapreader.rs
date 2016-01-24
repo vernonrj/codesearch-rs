@@ -1,3 +1,9 @@
+// Copyright 2016 Vernon Jones.
+// Original code Copyright 2013 Manpreet Singh ( junkblocker@yahoo.com ). All rights reserved.
+// Original code Copyright 2011 The Go Authors.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 use index::reader::read::{IndexReader, POST_ENTRY_SIZE};
 
 use index::profiling;
