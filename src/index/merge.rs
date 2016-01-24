@@ -148,18 +148,18 @@ struct PostDataWriter<W: Write + Seek> {
 }
 
 impl<W: Write + Seek> PostDataWriter<W> {
-    pub fn new(out: BufWriter<W>) -> PostDataWriter<W> {
+    pub fn new(out: BufWriter<W>) -> io::Result<PostDataWriter<W>> {
         let mut out = out;
-        let base = get_offset(&mut out).unwrap() as u32;
-        PostDataWriter {
+        let base = try!(get_offset(&mut out)) as u32;
+        Ok(PostDataWriter {
             out: out,
-            post_index_file: BufWriter::with_capacity(256 << 10, TempFile::new().unwrap()),
+            post_index_file: BufWriter::with_capacity(256 << 10, try!(TempFile::new())),
             base: base,
             count: 0,
             offset: 0,
             last: 0,
             t: 0
-        }
+        })
     }
     pub fn trigram(&mut self, t: u32) {
         self.offset = get_offset(&mut self.out).unwrap() as u32;
@@ -320,7 +320,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let mut r1 = PostMapReader::new(&ix1, map1);
     let mut r2 = PostMapReader::new(&ix2, map2);
 
-    let mut w = PostDataWriter::new(ix3);
+    let mut w = try!(PostDataWriter::new(ix3));
 
     loop {
         let _frame = profiling::profile("merge: merge list of posting lists");
