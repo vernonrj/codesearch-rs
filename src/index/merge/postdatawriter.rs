@@ -7,9 +7,9 @@ use index::writer::{WriteTrigram, get_offset};
 use index::byteorder::{BigEndian, WriteBytesExt};
 use index::tempfile::TempFile;
 
-pub struct PostDataWriter<W: Write + Seek> {
-    pub out: BufWriter<W>,
-    pub post_index_file: BufWriter<TempFile>,
+pub struct PostDataWriter<'a, W: 'a + Write + Seek> {
+    out: &'a mut BufWriter<W>,
+    post_index_file: BufWriter<TempFile>,
     base: u32,
     count: u32,
     offset: u32,
@@ -17,10 +17,9 @@ pub struct PostDataWriter<W: Write + Seek> {
     t: u32
 }
 
-impl<W: Write + Seek> PostDataWriter<W> {
-    pub fn new(out: BufWriter<W>) -> io::Result<PostDataWriter<W>> {
-        let mut out = out;
-        let base = try!(get_offset(&mut out)) as u32;
+impl<'a, W: Write + Seek> PostDataWriter<'a, W> {
+    pub fn new(out: &'a mut BufWriter<W>) -> io::Result<Self> {
+        let base = try!(get_offset(out)) as u32;
         Ok(PostDataWriter {
             out: out,
             post_index_file: BufWriter::with_capacity(256 << 10, try!(TempFile::new())),
@@ -32,7 +31,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         })
     }
     pub fn trigram(&mut self, t: u32) {
-        self.offset = get_offset(&mut self.out).unwrap() as u32;
+        self.offset = get_offset(self.out).unwrap() as u32;
         self.count = 0;
         self.t = t;
         self.last = u32::MAX;
@@ -41,7 +40,7 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             self.out.write_trigram(self.t).unwrap();
         }
-        varint::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
+        varint::write_uvarint(self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
         self.count += 1;
     }
@@ -49,9 +48,12 @@ impl<W: Write + Seek> PostDataWriter<W> {
         if self.count == 0 {
             return;
         }
-        varint::write_uvarint(&mut self.out, 0).unwrap();
+        varint::write_uvarint(self.out, 0).unwrap();
         self.post_index_file.write_trigram(self.t).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.count).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.offset - self.base).unwrap();
+    }
+    pub fn into_inner(self) -> BufWriter<TempFile> {
+        self.post_index_file
     }
 }

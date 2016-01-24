@@ -176,11 +176,42 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     }
     name_index_file.write_u32::<BigEndian>(try!(get_offset(&mut ix3)) as u32).unwrap();
 
-    // Merged list of posting lists.
     let post_data = try!(get_offset(&mut ix3));
-    let mut r1 = PostMapReader::new(&ix1, map1);
-    let mut r2 = PostMapReader::new(&ix2, map2);
 
+    let post_index_file = try!(merge_list_of_posting_lists(PostMapReader::new(&ix1, map1),
+                                                           PostMapReader::new(&ix2, map2),
+                                                           &mut ix3));
+
+    // Name index
+    let name_index = try!(get_offset(&mut ix3));
+    name_index_file.seek(SeekFrom::Start(0)).unwrap();
+    copy_file(&mut ix3, &mut BufReader::new(name_index_file.into_inner().unwrap()));
+
+    // Posting list index
+    let post_index = get_offset(&mut ix3).unwrap();
+    copy_file(&mut ix3, &mut BufReader::new(post_index_file.into_inner().unwrap()));
+    
+    trace!("path_data  = {}", path_data );
+    trace!("name_data  = {}", name_data );
+    trace!("post_data  = {}", post_data );
+    trace!("name_index = {}", name_index); 
+    trace!("post_index = {}", post_index); 
+
+
+    ix3.write_u32::<BigEndian>(path_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(name_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(post_data as u32).unwrap();
+    ix3.write_u32::<BigEndian>(name_index as u32).unwrap();
+    ix3.write_u32::<BigEndian>(post_index as u32).unwrap();
+    try!(ix3.write(index::TRAILER_MAGIC.as_bytes()));
+    Ok(())
+}
+
+fn merge_list_of_posting_lists(mut r1: PostMapReader,
+                               mut r2: PostMapReader,
+                               ix3: &mut BufWriter<File>) -> io::Result<BufWriter<TempFile>>
+{
+    // Merged list of posting lists.
     let mut w = try!(PostDataWriter::new(ix3));
 
     loop {
@@ -223,29 +254,5 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         }
     }
 
-    let mut ix3 = w.out;
-
-    // Name index
-    let name_index = try!(get_offset(&mut ix3));
-    name_index_file.seek(SeekFrom::Start(0)).unwrap();
-    copy_file(&mut ix3, &mut BufReader::new(name_index_file.into_inner().unwrap()));
-
-    // Posting list index
-    let post_index = get_offset(&mut ix3).unwrap();
-    copy_file(&mut ix3, &mut BufReader::new(w.post_index_file.into_inner().unwrap()));
-    
-    trace!("path_data  = {}", path_data );
-    trace!("name_data  = {}", name_data );
-    trace!("post_data  = {}", post_data );
-    trace!("name_index = {}", name_index); 
-    trace!("post_index = {}", post_index); 
-
-
-    ix3.write_u32::<BigEndian>(path_data as u32).unwrap();
-    ix3.write_u32::<BigEndian>(name_data as u32).unwrap();
-    ix3.write_u32::<BigEndian>(post_data as u32).unwrap();
-    ix3.write_u32::<BigEndian>(name_index as u32).unwrap();
-    ix3.write_u32::<BigEndian>(post_index as u32).unwrap();
-    try!(ix3.write(index::TRAILER_MAGIC.as_bytes()));
-    Ok(())
+    Ok(w.into_inner())
 }
