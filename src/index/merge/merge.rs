@@ -31,9 +31,8 @@
 // Copy the name index and posting list index into C's index and write the trailer.
 // Rename C's index onto the new index.
 
-use index::varint;
 use index::reader::read::IndexReader;
-use index::writer::{WriteTrigram, get_offset, copy_file};
+use index::writer::{get_offset, copy_file};
 use index::profiling;
 use index;
 
@@ -41,60 +40,12 @@ use index::tempfile::TempFile;
 use index::byteorder::{BigEndian, WriteBytesExt};
 
 use super::postmapreader::{IdRange, PostMapReader};
+use super::postdatawriter::PostDataWriter;
 
 use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter};
 use std::u32;
 use std::fs::File;
 
-
-struct PostDataWriter<W: Write + Seek> {
-    out: BufWriter<W>,
-    post_index_file: BufWriter<TempFile>,
-    base: u32,
-    count: u32,
-    offset: u32,
-    last: u32,
-    t: u32
-}
-
-impl<W: Write + Seek> PostDataWriter<W> {
-    pub fn new(out: BufWriter<W>) -> io::Result<PostDataWriter<W>> {
-        let mut out = out;
-        let base = try!(get_offset(&mut out)) as u32;
-        Ok(PostDataWriter {
-            out: out,
-            post_index_file: BufWriter::with_capacity(256 << 10, try!(TempFile::new())),
-            base: base,
-            count: 0,
-            offset: 0,
-            last: 0,
-            t: 0
-        })
-    }
-    pub fn trigram(&mut self, t: u32) {
-        self.offset = get_offset(&mut self.out).unwrap() as u32;
-        self.count = 0;
-        self.t = t;
-        self.last = u32::MAX;
-    }
-    pub fn file_id(&mut self, id: u32) {
-        if self.count == 0 {
-            self.out.write_trigram(self.t).unwrap();
-        }
-        varint::write_uvarint(&mut self.out, id.wrapping_sub(self.last)).unwrap();
-        self.last = id;
-        self.count += 1;
-    }
-    pub fn end_trigram(&mut self) {
-        if self.count == 0 {
-            return;
-        }
-        varint::write_uvarint(&mut self.out, 0).unwrap();
-        self.post_index_file.write_trigram(self.t).unwrap();
-        self.post_index_file.write_u32::<BigEndian>(self.count).unwrap();
-        self.post_index_file.write_u32::<BigEndian>(self.offset - self.base).unwrap();
-    }
-}
 
 
 
