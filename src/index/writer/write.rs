@@ -9,13 +9,12 @@
 #![allow(dead_code)]
 use std::fs::File;
 use std::path::Path;
-use std::io::{self, Seek, SeekFrom, BufWriter, Write};
+use std::io::{self, BufWriter, Write};
 use std::ffi::OsString;
-use std::ops::Deref;
 use std::mem;
 
 use index::varint;
-use index::tempfile::{TempFile, NamedTempFile};
+use index::tempfile::TempFile;
 use index::byteorder::{BigEndian, WriteBytesExt};
 use index::profiling;
 
@@ -93,7 +92,7 @@ pub struct IndexWriter {
     pub bytes_written: usize,
 
     post: Vec<PostEntry>,
-    post_files: Vec<NamedTempFile>,
+    post_files: Vec<Vec<PostEntry>>,
     post_index: BufWriter<TempFile>,
 
     index: BufWriter<File>
@@ -266,8 +265,8 @@ impl IndexWriter {
         let mut heap = PostHeap::new();
         info!("merge {} files + mem", self.post_files.len());
 
-        for f in &self.post_files {
-            try!(heap.add_file(f.deref()));
+        for p in self.post_files.drain(..) {
+            heap.add_mem(p);
         }
         sort_post(&mut self.post);
         let mut v = Vec::new();
@@ -312,14 +311,9 @@ impl IndexWriter {
     fn flush_post(&mut self) -> io::Result<()> {
         let _frame = profiling::profile("IndexWriter::flush_post");
         sort_post(&mut self.post);
-        let mut f = BufWriter::with_capacity(NPOST, try!(NamedTempFile::new()));
-        debug!("flush {} entries to tempfile", self.post.len());
-        for each in &self.post {
-            try!(f.write_u64::<BigEndian>(each.value()));
-        }
-        self.post.clear();
-        try!(f.seek(SeekFrom::Start(0)));
-        self.post_files.push(try!(f.into_inner()));
+        let mut v = Vec::with_capacity(NPOST);
+        mem::swap(&mut v, &mut self.post);
+        self.post_files.push(v);
         Ok(())
     }
 }
