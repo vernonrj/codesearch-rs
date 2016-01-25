@@ -6,9 +6,9 @@ extern crate tempfile;
 
 
 extern crate consts;
-extern crate csearch;
-extern crate profiling;
-extern crate varint;
+extern crate libcsearch;
+extern crate libprofiling;
+extern crate libvarint;
 
 pub mod writer;
 pub mod merge;

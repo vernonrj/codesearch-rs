@@ -72,7 +72,7 @@ use std::io::Cursor;
 use consts::TRAILER_MAGIC;
 use memmap::{Mmap, Protection};
 use byteorder::{BigEndian, ReadBytesExt};
-use varint;
+use libvarint;
 
 use super::regexp::{Query, QueryOperation};
 use super::search;
@@ -87,9 +87,9 @@ pub type FileID = u32;
 ///
 /// ```rust
 /// # extern crate regex_syntax;
-/// # extern crate csearch;
-/// # use csearch::reader::IndexReader;
-/// # use csearch::reader::RegexInfo;
+/// # extern crate libcsearch;
+/// # use libcsearch::reader::IndexReader;
+/// # use libcsearch::reader::RegexInfo;
 /// # use regex_syntax::Expr;
 /// # use std::io;
 /// # fn main() { foo(); }
@@ -144,7 +144,7 @@ impl IndexReader {
     /// Open an index file from path
     ///
     /// ```no_run
-    /// # use csearch::reader::IndexReader;
+    /// # use libcsearch::reader::IndexReader;
     /// # use std::io;
     /// # fn foo() -> io::Result<()> {
     /// let idx = try!(IndexReader::open("foo.txt"));
@@ -472,7 +472,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     fn next(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let (delta, n) = varint::read_uvarint(self.d).unwrap();
+            let (delta, n) = libvarint::read_uvarint(self.d).unwrap();
             self.d = self.d.split_at(n as usize).1;
             self.fileid += delta as i64;
             let mut is_fileid_found = true;

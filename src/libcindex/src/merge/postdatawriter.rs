@@ -7,7 +7,7 @@
 use std::io::{self, Write, Seek, BufWriter};
 use std::u32;
 
-use varint;
+use libvarint;
 use writer::{WriteTrigram, get_offset};
 
 use byteorder::{BigEndian, WriteBytesExt};
@@ -46,7 +46,7 @@ impl<'a, W: Write + Seek> PostDataWriter<'a, W> {
         if self.count == 0 {
             self.out.write_trigram(self.t).unwrap();
         }
-        varint::write_uvarint(self.out, id.wrapping_sub(self.last)).unwrap();
+        libvarint::write_uvarint(self.out, id.wrapping_sub(self.last)).unwrap();
         self.last = id;
         self.count += 1;
     }
@@ -54,7 +54,7 @@ impl<'a, W: Write + Seek> PostDataWriter<'a, W> {
         if self.count == 0 {
             return;
         }
-        varint::write_uvarint(self.out, 0).unwrap();
+        libvarint::write_uvarint(self.out, 0).unwrap();
         self.post_index_file.write_trigram(self.t).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.count).unwrap();
         self.post_index_file.write_u32::<BigEndian>(self.offset - self.base).unwrap();

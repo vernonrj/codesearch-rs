@@ -1,6 +1,7 @@
 [package]
-name = "varint"
+name = "libprofiling"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
+hprof = "0.1.3"

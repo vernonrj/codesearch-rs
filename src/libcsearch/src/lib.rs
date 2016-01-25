@@ -5,7 +5,7 @@ extern crate regex;
 extern crate regex_syntax;
 
 extern crate consts;
-extern crate varint;
+extern crate libvarint;
 
 pub mod grep;
 pub mod reader;

@@ -1,5 +1,5 @@
 [package]
-name = "cindex"
+name = "libcindex"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
@@ -10,6 +10,6 @@ memmap = "0.2.3"
 tempfile = "1.1.3"
 
 consts = { path = "../consts" }
-csearch = { path = "../csearch" }
-profiling = { path = "../profiling" }
-varint = { path = "../varint" }
+libcsearch = { path = "../libcsearch" }
+libprofiling = { path = "../libprofiling" }
+libvarint = { path = "../libvarint" }

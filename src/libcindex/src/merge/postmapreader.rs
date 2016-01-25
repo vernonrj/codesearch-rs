@@ -4,10 +4,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-use csearch::reader::read::{IndexReader, POST_ENTRY_SIZE};
+use libcsearch::reader::read::{IndexReader, POST_ENTRY_SIZE};
 
-use profiling;
-use varint;
+use libprofiling;
+use libvarint;
 
 use std::u32;
 
@@ -33,7 +33,7 @@ pub struct PostMapReader<'a> {
 
 impl<'a> PostMapReader<'a> {
     pub fn new(index: &'a IndexReader, id_map: Vec<IdRange>) -> PostMapReader<'a> {
-        let _frame = profiling::profile("PostMapReader::new");
+        let _frame = libprofiling::profile("PostMapReader::new");
         let s = unsafe { index.as_slice() };
         let mut p = PostMapReader {
             index: index,
@@ -51,7 +51,7 @@ impl<'a> PostMapReader<'a> {
         p
     }
     pub fn next_trigram(&mut self) {
-        let _frame = profiling::profile("PostMapReader::next_trigram");
+        let _frame = libprofiling::profile("PostMapReader::next_trigram");
         self.tri_num += 1;
         self.load();
     }
@@ -82,7 +82,7 @@ impl<'a> PostMapReader<'a> {
     pub fn next_id(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
-            let (delta, n) = varint::read_uvarint(self.d).unwrap();
+            let (delta, n) = libvarint::read_uvarint(self.d).unwrap();
             self.d = self.d.split_at(n as usize).1;
             self.old_id = self.old_id.wrapping_add(delta as u32);
             while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {

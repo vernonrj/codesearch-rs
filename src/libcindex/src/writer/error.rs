@@ -40,7 +40,7 @@ impl IndexError {
     /// Creates a new IndexError. Works the same as std::io::Error.
     ///
     /// ```
-    /// # use cindex::writer::{IndexResult, IndexError, IndexErrorKind};
+    /// # use libcindex::writer::{IndexResult, IndexError, IndexErrorKind};
     /// # use std::io::Write;
     /// // IndexError can be created from io::Error
     /// fn try_something() -> IndexResult<()> {

@@ -9,7 +9,7 @@
 use std::mem;
 
 use super::postentry::PostEntry;
-use profiling;
+use libprofiling;
 
 
 // sortPost sorts the postentry list.
@@ -20,7 +20,7 @@ const K: usize = 12;
 
 
 pub fn sort_post(post: &mut Vec<PostEntry>) {
-    let _frame = profiling::profile("sort_post");
+    let _frame = libprofiling::profile("sort_post");
     let mut sort_tmp = Vec::<PostEntry>::with_capacity(post.len());
     unsafe { sort_tmp.set_len(post.len()) };
     let mut sort_n = [0; 1<<K];

@@ -13,14 +13,14 @@ extern crate regex;
 extern crate regex_syntax;
 
 extern crate consts;
-extern crate customlogger;
-extern crate csearch;
-extern crate varint;
+extern crate libcustomlogger;
+extern crate libcsearch;
+extern crate libvarint;
 
-use csearch::grep;
+use libcsearch::grep;
 
-use csearch::reader::regexp;
-use csearch::reader::read::IndexReader;
+use libcsearch::reader::regexp;
+use libcsearch::reader::read::IndexReader;
 
 use std::io::{self, Write};
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ pub struct MatchOptions {
 }
 
 fn main() {
-    customlogger::init(log::LogLevelFilter::Info).unwrap();
+    libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
 
     let matches = clap::App::new("csearch")
         .version(&crate_version!()[..])
@@ -123,7 +123,7 @@ empty, $HOME/.csearchindex.
     };
 
     // Get the index from file
-    let index_path = csearch::csearch_index();
+    let index_path = libcsearch::csearch_index();
     let index_reader = match IndexReader::open(index_path) {
         Ok(i) => i,
         Err(e) => panic!("{}", e)

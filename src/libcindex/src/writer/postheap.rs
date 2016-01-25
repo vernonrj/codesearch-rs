@@ -1,6 +1,6 @@
 use std::vec;
 
-use profiling;
+use libprofiling;
 
 use super::postentry::PostEntry;
 
@@ -63,7 +63,7 @@ impl PostHeap {
         }
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
-        let _frame = profiling::profile("PostHeap::add_mem");
+        let _frame = libprofiling::profile("PostHeap::add_mem");
         if let Some(p) = PostChunk::new(v) {
             self.add(p);
         }

@@ -31,9 +31,9 @@
 // Copy the name index and posting list index into C's index and write the trailer.
 // Rename C's index onto the new index.
 
-use csearch::reader::read::IndexReader;
+use libcsearch::reader::read::IndexReader;
 use writer::{get_offset, copy_file};
-use profiling;
+use libprofiling;
 
 use tempfile::TempFile;
 use byteorder::{BigEndian, WriteBytesExt};
@@ -50,7 +50,7 @@ use std::fs::File;
 
 
 pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
-    let _frame_merge = profiling::profile("merge");
+    let _frame_merge = libprofiling::profile("merge");
     let ix1 = try!(IndexReader::open(src1));
     let ix2 = try!(IndexReader::open(src2));
     let paths1 = ix1.indexed_paths();
@@ -62,7 +62,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let mut map1 = Vec::<IdRange>::new();
     let mut map2 = Vec::<IdRange>::new();
     for path in &paths2 {
-        let _frame = profiling::profile("merge: merge indexed paths");
+        let _frame = libprofiling::profile("merge: merge indexed paths");
         let old = i1;
         while (i1 as usize) < ix1.num_name && ix1.name(i1 as u32) < *path {
             i1 += 1;
@@ -118,7 +118,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let mut last = "\0".to_string(); // not a prefix of anything
 
     while mi1 < paths1.len() && mi2 < paths2.len() {
-        let _frame = profiling::profile("merge: merge file_ids");
+        let _frame = libprofiling::profile("merge: merge file_ids");
         let p = if mi2 >= paths2.len() || mi1 < paths1.len() && paths1[mi1] <= paths2[mi2] {
             let p = paths1[mi1].clone();
             mi1 += 1;
@@ -146,7 +146,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     mi2 = 0;
 
     while new < num_name {
-        let _frame = profiling::profile("merge: Merge list of names");
+        let _frame = libprofiling::profile("merge: Merge list of names");
         if mi1 < map1.len() && map1[mi1].new == new {
             for i in map1[mi1].low .. map1[mi1].high {
                 let name = ix1.name(i);
@@ -215,7 +215,7 @@ fn merge_list_of_posting_lists(mut r1: PostMapReader,
     let mut w = try!(PostDataWriter::new(ix3));
 
     loop {
-        let _frame = profiling::profile("merge: merge list of posting lists");
+        let _frame = libprofiling::profile("merge: merge list of posting lists");
         if r1.trigram < r2.trigram {
             w.trigram(r1.trigram);
             while r1.next_id() {

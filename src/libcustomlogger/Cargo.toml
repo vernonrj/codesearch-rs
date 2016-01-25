@@ -1,5 +1,5 @@
 [package]
-name = "customlogger"
+name = "libcustomlogger"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 

@@ -1,5 +1,5 @@
 [package]
-name = "csearch"
+name = "libcsearch"
 version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
@@ -11,4 +11,4 @@ regex = "0.1.48"
 regex-syntax = "0.2.2"
 
 consts = { path = "../consts" }
-varint = { path = "../varint" }
+libvarint = { path = "../libvarint" }

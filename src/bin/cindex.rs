@@ -10,15 +10,15 @@ extern crate clap;
 extern crate log;
 
 extern crate consts;
-extern crate cindex;
-extern crate csearch;
-extern crate customlogger;
-extern crate profiling;
-extern crate varint;
+extern crate libcindex;
+extern crate libcsearch;
+extern crate libcustomlogger;
+extern crate libprofiling;
+extern crate libvarint;
 
 
-use csearch::reader::read::IndexReader;
-use cindex::writer::{IndexWriter, IndexErrorKind};
+use libcsearch::reader::read::IndexReader;
+use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 
 use std::collections::HashSet;
@@ -157,7 +157,7 @@ With no path arguments, cindex -reset removes the index.")
     } else {
         LogLevelFilter::Info
     };
-    customlogger::init(max_log_level).unwrap();
+    libcustomlogger::init(max_log_level).unwrap();
 
     let mut excludes: Vec<String> = vec![".csearchindex".to_string()];
     let mut args = Vec::<String>::new();
@@ -178,7 +178,7 @@ With no path arguments, cindex -reset removes the index.")
         return;
     }
     if matches.is_present("reset-index") {
-        let index_path = csearch::csearch_index();
+        let index_path = libcsearch::csearch_index();
         let p = Path::new(&index_path);
         if !p.exists() {
             // does not exist so nothing to do
@@ -213,7 +213,7 @@ With no path arguments, cindex -reset removes the index.")
         .collect();
     paths.sort();
 
-    let mut index_path = csearch::csearch_index();
+    let mut index_path = libcsearch::csearch_index();
     let needs_merge = if Path::new(&index_path).exists() {
         index_path.push('~');
         true
@@ -245,7 +245,7 @@ With no path arguments, cindex -reset removes the index.")
             i.max_line_len = b;
         }
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string));
-        let _frame = profiling::profile("Index files");
+        let _frame = libprofiling::profile("Index files");
         while let Ok(f) = rx.recv() {
             if !seen.contains(&f) {
                 match i.add_file(&f) {
@@ -268,7 +268,7 @@ With no path arguments, cindex -reset removes the index.")
         info!("flush index");
         i.flush().expect("failed to flush index to disk");
         drop(_frame);
-        profiling::print_profiling();
+        libprofiling::print_profiling();
     });
 
     for p in paths {
@@ -282,21 +282,21 @@ With no path arguments, cindex -reset removes the index.")
     h.join().unwrap();
     if needs_merge {
         let dest_path = index_path.clone() + &"~";
-        let src1_path = csearch::csearch_index();
+        let src1_path = libcsearch::csearch_index();
         let src2_path = index_path.clone();
         info!("merge {} {}", src1_path, src2_path);
-        cindex::merge::merge(dest_path, src1_path, src2_path).unwrap();
+        libcindex::merge::merge(dest_path, src1_path, src2_path).unwrap();
         fs::remove_file(index_path.clone()).unwrap();
-        fs::remove_file(csearch::csearch_index()).unwrap();
-        fs::rename(index_path + &"~", csearch::csearch_index()).unwrap();
+        fs::remove_file(libcsearch::csearch_index()).unwrap();
+        fs::rename(index_path + &"~", libcsearch::csearch_index()).unwrap();
     }
 
     info!("done");
-    profiling::print_profiling();
+    libprofiling::print_profiling();
 }
 
 fn open_index_or_fail() -> IndexReader {
-    let index_path = csearch::csearch_index();
+    let index_path = libcsearch::csearch_index();
     match IndexReader::open(&index_path) {
         Ok(i) => i,
         Err(e) => {
