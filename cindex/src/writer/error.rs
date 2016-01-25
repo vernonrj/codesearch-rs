@@ -2,7 +2,7 @@ use std::error::{self, Error};
 use std::fmt;
 use std::io;
 
-use index::byteorder;
+use byteorder;
 
 /// The Error type for indexing operations.
 ///

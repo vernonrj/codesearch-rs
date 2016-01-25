@@ -6,7 +6,7 @@
 
 use csearch::reader::read::{IndexReader, POST_ENTRY_SIZE};
 
-use index::profiling;
+use profiling;
 use varint;
 
 use std::u32;

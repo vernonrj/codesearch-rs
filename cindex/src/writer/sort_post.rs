@@ -9,7 +9,7 @@
 use std::mem;
 
 use super::postentry::PostEntry;
-use index::profiling;
+use profiling;
 
 
 // sortPost sorts the postentry list.

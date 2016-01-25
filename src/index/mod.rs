@@ -10,10 +10,6 @@ extern crate regex_syntax;
 extern crate hprof;
 
 
-pub mod writer;
-pub mod merge;
-pub mod profiling;
-
 use std::env;
 
 

@@ -11,13 +11,14 @@ extern crate log;
 extern crate varint;
 extern crate consts;
 extern crate csearch;
+extern crate cindex;
+extern crate profiling;
 
 mod customlogger;
 mod index;
 
 use csearch::reader::read::IndexReader;
-use index::writer::{IndexWriter, IndexErrorKind};
-use index::profiling;
+use cindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 
 use std::collections::HashSet;
@@ -284,7 +285,7 @@ With no path arguments, cindex -reset removes the index.")
         let src1_path = index::csearch_index();
         let src2_path = index_path.clone();
         info!("merge {} {}", src1_path, src2_path);
-        index::merge::merge(dest_path, src1_path, src2_path).unwrap();
+        cindex::merge::merge(dest_path, src1_path, src2_path).unwrap();
         fs::remove_file(index_path.clone()).unwrap();
         fs::remove_file(index::csearch_index()).unwrap();
         fs::rename(index_path + &"~", index::csearch_index()).unwrap();

@@ -8,10 +8,10 @@ use std::io::{self, Write, Seek, BufWriter};
 use std::u32;
 
 use varint;
-use index::writer::{WriteTrigram, get_offset};
+use writer::{WriteTrigram, get_offset};
 
-use index::byteorder::{BigEndian, WriteBytesExt};
-use index::tempfile::TempFile;
+use byteorder::{BigEndian, WriteBytesExt};
+use tempfile::TempFile;
 
 pub struct PostDataWriter<'a, W: 'a + Write + Seek> {
     out: &'a mut BufWriter<W>,

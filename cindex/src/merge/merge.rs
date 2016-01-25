@@ -32,11 +32,11 @@
 // Rename C's index onto the new index.
 
 use csearch::reader::read::IndexReader;
-use index::writer::{get_offset, copy_file};
-use index::profiling;
+use writer::{get_offset, copy_file};
+use profiling;
 
-use index::tempfile::TempFile;
-use index::byteorder::{BigEndian, WriteBytesExt};
+use tempfile::TempFile;
+use byteorder::{BigEndian, WriteBytesExt};
 use consts;
 
 use super::postmapreader::{IdRange, PostMapReader};

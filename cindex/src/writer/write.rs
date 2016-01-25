@@ -14,9 +14,9 @@ use std::ffi::OsString;
 use std::mem;
 
 use varint;
-use index::tempfile::TempFile;
-use index::byteorder::{BigEndian, WriteBytesExt};
-use index::profiling;
+use tempfile::TempFile;
+use byteorder::{BigEndian, WriteBytesExt};
+use profiling;
 
 use consts::{MAGIC, TRAILER_MAGIC};
 

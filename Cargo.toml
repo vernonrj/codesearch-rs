@@ -21,6 +21,8 @@ tempfile = "1.1.3"
 hprof = "0.1.3"
 consts = { path = "consts" }
 csearch = { path = "csearch" }
+cindex = { path = "cindex" }
+profiling = { path = "profiling" }
 varint = { path = "varint" }
 
 [features]

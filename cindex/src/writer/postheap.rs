@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::{self, Cursor};
 use std::vec;
 
-use index::byteorder::{BigEndian, ReadBytesExt};
-use index::memmap::{Mmap, Protection};
-use index::profiling;
+use byteorder::{BigEndian, ReadBytesExt};
+use memmap::{Mmap, Protection};
+use profiling;
 
 use super::NPOST;
 use super::postentry::PostEntry;
