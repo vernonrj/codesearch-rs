@@ -87,9 +87,9 @@ pub type FileID = u32;
 ///
 /// ```rust
 /// # extern crate regex_syntax;
-/// # extern crate codesearch_lib;
-/// # use codesearch_lib::index::read::IndexReader;
-/// # use codesearch_lib::index::regexp::RegexInfo;
+/// # extern crate csearch;
+/// # use csearch::reader::IndexReader;
+/// # use csearch::reader::RegexInfo;
 /// # use regex_syntax::Expr;
 /// # use std::io;
 /// # fn main() { foo(); }
@@ -144,7 +144,7 @@ impl IndexReader {
     /// Open an index file from path
     ///
     /// ```no_run
-    /// # use codesearch_lib::index::read::IndexReader;
+    /// # use csearch::reader::IndexReader;
     /// # use std::io;
     /// # fn foo() -> io::Result<()> {
     /// let idx = try!(IndexReader::open("foo.txt"));

@@ -40,12 +40,13 @@ impl IndexError {
     /// Creates a new IndexError. Works the same as std::io::Error.
     ///
     /// ```
-    /// # use self::{IndexError, IndexErrorKind};
+    /// # use cindex::writer::{IndexResult, IndexError, IndexErrorKind};
+    /// # use std::io::Write;
     /// // IndexError can be created from io::Error
-    /// fn try_something() -> IndexError<()> {
+    /// fn try_something() -> IndexResult<()> {
     ///     // like std::io::Error, IndexError can be created from strings
     ///     let custom_error = IndexError::new(IndexErrorKind::LineTooLong, "oh no!");
-    ///     let mut b: [u8; 10] = [0; 10];
+    ///     let mut b = Vec::<u8>::new();
     ///     // std::io::Error can be cast to IndexError in a try! macro
     ///     try!(b.write(b"some bytes"));
     ///     Ok(())

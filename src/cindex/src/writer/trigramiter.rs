@@ -11,16 +11,6 @@ use super::error::{IndexResult, IndexError, IndexErrorKind};
 /// queried by the `.error()` method. This is because this iteration is a fairly
 /// tight loop, and flattening the return of the `.next()` method from
 /// `Option<Result<u32>>` to `Option<u32>` resulted in a respectable speedup.
-///
-///
-/// ```
-/// # use self::TrigramReader;
-/// # fn main() {
-/// let buf = "hello".as_bytes();
-/// let mut tr = TrigramReader::new(buf, 0, 100);
-/// assert_eq!(tr.next(), ('h' as u32) << 16 | ('e' as u32) << 8 | ('l' as u32));
-/// assert!(tr.take_error().is_none());
-/// # }
 /// ```
 pub struct TrigramReader<R: Read> {
     reader: io::Bytes<BufReader<R>>,
@@ -41,11 +31,6 @@ impl<R: Read> TrigramReader<R> {
     pub fn take_error(&mut self) -> Option<IndexResult<()>> {
         self.error.take()
     }
-    /// Creates a new object
-    ///
-    /// ```
-    /// let tr = TrigramReader::new("test".as_bytes(), 0, 100);
-    /// ```
     pub fn new(r: R, max_invalid: u64, max_line_len: u64) -> TrigramReader<R> {
         TrigramReader {
             reader: BufReader::with_capacity(16384, r).bytes(),

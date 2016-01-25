@@ -13,10 +13,9 @@ extern crate regex;
 extern crate regex_syntax;
 
 extern crate consts;
+extern crate customlogger;
 extern crate csearch;
 extern crate varint;
-
-pub mod customlogger;
 
 use csearch::grep;
 

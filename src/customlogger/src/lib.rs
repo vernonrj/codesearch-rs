@@ -1,7 +1,9 @@
 /// custom logger
+extern crate chrono;
+extern crate log;
 
 use chrono::Local;
-use log::{self, Log, LogRecord, LogLevelFilter, LogMetadata, SetLoggerError};
+use log::{Log, LogRecord, LogLevelFilter, LogMetadata, SetLoggerError};
 
 pub struct Logger {
     max_level: LogLevelFilter

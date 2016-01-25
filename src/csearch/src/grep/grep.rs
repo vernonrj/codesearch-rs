@@ -15,9 +15,9 @@ use std::path::Path;
  *
  * ```no_run
  * # extern crate regex;
+ * # extern crate csearch;
  * # use regex::Regex;
- * # use grep::grep::Grep;
- * # use grep::grep::GrepIter;
+ * # use csearch::grep::grep::{Grep, GrepIter};
  * # use std::io;
  * # fn main() { foo(); }
  * # fn foo() -> io::Result<()> {
@@ -42,8 +42,8 @@ impl Grep {
     ///
     /// ```rust
     /// # extern crate regex;
-    /// # extern crate codesearch_lib;
-    /// # use codesearch_lib::grep::grep::Grep;
+    /// # extern crate csearch;
+    /// # use csearch::grep::grep::Grep;
     /// use regex::Regex;
     /// # fn main() {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
@@ -58,11 +58,11 @@ impl Grep {
     /// Takes a filename and returns a GrepIter. Fails if the file open fails.
     ///
     /// ```no_run
-    /// # extern crate codesearch_lib;
     /// # extern crate regex;
+    /// # extern crate csearch;
     /// use std::io;
     /// # use regex::Regex;
-    /// # use codesearch_lib::grep::grep::{Grep, GrepIter};
+    /// # use csearch::grep::grep::{Grep, GrepIter};
     /// # fn main() { foo(); }
     /// # fn foo() -> io::Result<()> {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());

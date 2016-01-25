@@ -52,22 +52,6 @@ const MAX_INVALID_UTF8_RATION: f64 = 0.1;
 const MAX_LINE_LEN: u64 = 2000;
 
 
-/**
- * Creates an index
- *
- * ```no_run
- * # use index::writer::write::IndexWriter;
- * # fn main() {
- * let mut index_writer = IndexWriter::new("index").unwrap();
- * index_writer.add_paths("/path/to/be/indexed").unwrap();
- *
- * for each_file in walk_dir("/path/to/be/indexed") {
- *     index_writer.add_file(each_file).unwrap();
- * }
- * index_writer.flush().unwrap();
- * # }
- * ```
- */
 pub struct IndexWriter {
 
     /// Max number of allowed trigrams in a file
@@ -102,6 +86,7 @@ impl IndexWriter {
     /// Creates a new index file at `filename`
     ///
     /// ```no_run
+    /// # use cindex::writer::IndexWriter;
     /// let index = IndexWriter::new("index").unwrap();
     /// ```
     pub fn new<P: AsRef<Path>>(filename: P) -> io::Result<IndexWriter> {
@@ -136,7 +121,8 @@ impl IndexWriter {
     /// Open a file and index it
     ///
     /// ```no_run
-    /// let mut index = IndexWriter::open("index");
+    /// # use cindex::writer::IndexWriter;
+    /// let mut index = IndexWriter::new("index").unwrap();
     /// index.add_file("/path/to/file").unwrap();
     /// index.flush().unwrap();
     /// ```
