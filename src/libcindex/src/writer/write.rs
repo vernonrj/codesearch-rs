@@ -9,7 +9,7 @@
 #![allow(dead_code)]
 use std::fs::File;
 use std::path::Path;
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter, Read, Write};
 use std::ffi::OsString;
 use std::mem;
 
@@ -137,7 +137,10 @@ impl IndexWriter {
     ///
     /// `filename` is the name of the opened file referred to by `f`.
     /// `size` is the size of the file referred to by `f`.
-    fn add<P: AsRef<Path>>(&mut self, filename: P, f: File, size: u64) -> IndexResult<()> {
+    pub fn add<P, R>(&mut self, filename: P, f: R, size: u64) -> IndexResult<()>
+        where P: AsRef<Path>,
+              R: Read
+    {
         let _frame = libprofiling::profile("IndexWriter::add");
         if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
@@ -294,7 +297,7 @@ impl IndexWriter {
     }
 
     /// Flush the post data to a temporary file
-    fn flush_post(&mut self) -> io::Result<()> {
+    pub fn flush_post(&mut self) -> io::Result<()> {
         let _frame = libprofiling::profile("IndexWriter::flush_post");
         sort_post(&mut self.post);
         let mut v = Vec::with_capacity(NPOST);
