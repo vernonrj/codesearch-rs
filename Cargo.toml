@@ -9,16 +9,11 @@ homepage = "https://github.com/vernonrj/codesearch-rs"
 repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
-byteorder = "0.4.2"
-chrono = "0.2"
 clap = "1.5.5"
-memmap = "0.2.3"
 regex = "0.1.48"
 regex-syntax = "0.2.2"
 log = "0.3.5"
-num = "0.1.30"
-tempfile = "1.1.3"
-hprof = "0.1.3"
+
 consts = { path = "src/consts" }
 libcustomlogger = { path = "src/libcustomlogger" }
 libcsearch = { path = "src/libcsearch" }
