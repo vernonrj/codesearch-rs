@@ -17,7 +17,6 @@ extern crate csearch;
 extern crate varint;
 
 pub mod customlogger;
-pub mod index;
 
 use csearch::grep;
 
@@ -125,7 +124,7 @@ empty, $HOME/.csearchindex.
     };
 
     // Get the index from file
-    let index_path = index::csearch_index();
+    let index_path = csearch::csearch_index();
     let index_reader = match IndexReader::open(index_path) {
         Ok(i) => i,
         Err(e) => panic!("{}", e)

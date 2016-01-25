@@ -10,6 +10,12 @@ extern crate varint;
 pub mod grep;
 pub mod reader;
 
-#[test]
-fn it_works() {
+use std::env;
+
+
+pub fn csearch_index() -> String {
+    env::var("CSEARCHINDEX")
+        .or_else(|_| env::var("HOME").or_else(|_| env::var("USERPROFILE"))
+                        .map(|s| s + &"/.csearchindex"))
+        .expect("no valid path to index")
 }

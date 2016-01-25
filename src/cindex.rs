@@ -15,7 +15,6 @@ extern crate cindex;
 extern crate profiling;
 
 mod customlogger;
-mod index;
 
 use csearch::reader::read::IndexReader;
 use cindex::writer::{IndexWriter, IndexErrorKind};
@@ -178,7 +177,7 @@ With no path arguments, cindex -reset removes the index.")
         return;
     }
     if matches.is_present("reset-index") {
-        let index_path = index::csearch_index();
+        let index_path = csearch::csearch_index();
         let p = Path::new(&index_path);
         if !p.exists() {
             // does not exist so nothing to do
@@ -213,7 +212,7 @@ With no path arguments, cindex -reset removes the index.")
         .collect();
     paths.sort();
 
-    let mut index_path = index::csearch_index();
+    let mut index_path = csearch::csearch_index();
     let needs_merge = if Path::new(&index_path).exists() {
         index_path.push('~');
         true
@@ -282,13 +281,13 @@ With no path arguments, cindex -reset removes the index.")
     h.join().unwrap();
     if needs_merge {
         let dest_path = index_path.clone() + &"~";
-        let src1_path = index::csearch_index();
+        let src1_path = csearch::csearch_index();
         let src2_path = index_path.clone();
         info!("merge {} {}", src1_path, src2_path);
         cindex::merge::merge(dest_path, src1_path, src2_path).unwrap();
         fs::remove_file(index_path.clone()).unwrap();
-        fs::remove_file(index::csearch_index()).unwrap();
-        fs::rename(index_path + &"~", index::csearch_index()).unwrap();
+        fs::remove_file(csearch::csearch_index()).unwrap();
+        fs::rename(index_path + &"~", csearch::csearch_index()).unwrap();
     }
 
     info!("done");
@@ -296,7 +295,7 @@ With no path arguments, cindex -reset removes the index.")
 }
 
 fn open_index_or_fail() -> IndexReader {
-    let index_path = index::csearch_index();
+    let index_path = csearch::csearch_index();
     match IndexReader::open(&index_path) {
         Ok(i) => i,
         Err(e) => {
