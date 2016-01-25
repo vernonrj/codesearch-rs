@@ -1,12 +1,7 @@
-use std::fs::File;
-use std::io::{self, Cursor};
 use std::vec;
 
-use byteorder::{BigEndian, ReadBytesExt};
-use memmap::{Mmap, Protection};
 use profiling;
 
-use super::NPOST;
 use super::postentry::PostEntry;
 
 struct PostChunk {
@@ -30,13 +25,10 @@ impl PostChunk {
             })
         }
     }
-    pub fn peek<'a>(&'a self) -> &'a PostEntry {
-        debug_assert!(!self.is_empty());
-        &self.e
-    }
     pub fn is_empty(&self) -> bool {
         self.size == 0
     }
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.size
     }
@@ -69,23 +61,6 @@ impl PostHeap {
         PostHeap {
             ch: Vec::new()
         }
-    }
-    pub fn len(&self) -> usize {
-        self.ch.iter()
-               .map(PostChunk::len)
-               .fold(0, |a, b| a + b)
-    }
-    pub fn is_empty(&self) -> bool { self.ch.is_empty() }
-    pub fn add_file(&mut self, f: &File) -> io::Result<()> {
-        let _frame = profiling::profile("PostHeap::add_file");
-        let m = try!(Mmap::open(f, Protection::Read));
-        let mut bytes = Cursor::new(unsafe { m.as_slice() });
-        let mut ch = Vec::with_capacity(NPOST);
-        while let Ok(p) = bytes.read_u64::<BigEndian>() {
-            ch.push(PostEntry(p));
-        }
-        self.add_mem(ch);
-        Ok(())
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
         let _frame = profiling::profile("PostHeap::add_mem");
@@ -177,25 +152,47 @@ impl Iterator for IntoIter {
     }
 }
 
+
+#[test]
+fn test_postchunk_empty() {
+    let c = PostChunk::new(vec![]);
+    assert!(c.is_none());
+}
+
+#[test]
+fn test_postchunk_sized() {
+    let c = PostChunk::new(vec![PostEntry::new(0, 32),
+                                PostEntry::new(1, 32),
+                                PostEntry::new(3, 35)]).unwrap();
+    assert!(!c.is_empty());
+    assert_eq!(c.len(), 3);
+}
+
+#[test]
+fn test_postchunk_iter() {
+    let mut c = PostChunk::new(vec![PostEntry::new(0, 32),
+                                    PostEntry::new(1, 32),
+                                    PostEntry::new(3, 35)]).unwrap();
+    assert_eq!(c.next(), Some(PostEntry::new(0, 32)));
+    assert_eq!(c.next(), Some(PostEntry::new(1, 32)));
+    assert_eq!(c.next(), Some(PostEntry::new(3, 35)));
+    assert_eq!(c.next(), None);
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use super::super::postentry::PostEntry;
 
     #[test]
-    fn test_postheap_build() {
-        let p = PostHeap::new();
-        assert!(p.len() == 0);
-        assert!(p.is_empty());
-    }
-
-    #[test]
     fn test_postheap_add_mem() {
         let mut p = PostHeap::new();
         p.add_mem(vec![PostEntry::new(0, 32),
                        PostEntry::new(5, 32)]);
-        assert_eq!(p.len(), 2);
-        assert!(!p.is_empty());
+        assert!(!p.ch.is_empty());
+        assert_eq!(p.ch.len(), 1);
     }
 
     #[test]
@@ -219,8 +216,6 @@ mod tests {
         let mut p = PostHeap::new();
         p.add_mem(v1.clone());
         p.add_mem(v2.clone());
-        assert_eq!(p.len(), v_comb.len());
-        assert!(!p.is_empty());
         assert!(p.into_iter().collect::<Vec<_>>() == v_comb);
     }
 }
