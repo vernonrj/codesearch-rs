@@ -12,9 +12,12 @@ extern crate log;
 extern crate regex;
 extern crate regex_syntax;
 
+extern crate csearch;
+
 pub mod customlogger;
 pub mod index;
-pub mod grep;
+
+use csearch::grep;
 
 use index::reader::regexp;
 use index::reader::read::IndexReader;

@@ -1,0 +1,8 @@
+[package]
+name = "csearch"
+version = "0.1.0"
+authors = ["Vernon Jones <vernonrjones@gmail.com>"]
+
+[dependencies]
+regex = "0.1.48"
+regex-syntax = "0.2.2"

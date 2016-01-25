@@ -19,6 +19,7 @@ log = "0.3.5"
 num = "0.1.30"
 tempfile = "1.1.3"
 hprof = "0.1.3"
+csearch = { path = "csearch" }
 
 [features]
 profile = []
