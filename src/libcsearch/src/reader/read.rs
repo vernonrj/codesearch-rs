@@ -74,7 +74,7 @@ use memmap::{Mmap, Protection};
 use byteorder::{BigEndian, ReadBytesExt};
 use libvarint;
 
-use super::regexp::{Query, QueryOperation};
+use regexp::{Query, QueryOperation};
 use super::search;
 
 pub const POST_ENTRY_SIZE: usize = 3 + 4 + 4;
@@ -89,7 +89,7 @@ pub type FileID = u32;
 /// # extern crate regex_syntax;
 /// # extern crate libcsearch;
 /// # use libcsearch::reader::IndexReader;
-/// # use libcsearch::reader::RegexInfo;
+/// # use libcsearch::regexp::RegexInfo;
 /// # use regex_syntax::Expr;
 /// # use std::io;
 /// # fn main() { foo(); }

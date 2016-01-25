@@ -31,7 +31,7 @@
 // Copy the name index and posting list index into C's index and write the trailer.
 // Rename C's index onto the new index.
 
-use libcsearch::reader::read::IndexReader;
+use libcsearch::reader::IndexReader;
 use writer::{get_offset, copy_file};
 use libprofiling;
 

@@ -16,7 +16,7 @@ extern crate libprofiling;
 extern crate libvarint;
 
 
-use libcsearch::reader::read::IndexReader;
+use libcsearch::reader::IndexReader;
 use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
 

@@ -9,6 +9,7 @@ extern crate libvarint;
 
 pub mod grep;
 pub mod reader;
+pub mod regexp;
 
 use std::env;
 

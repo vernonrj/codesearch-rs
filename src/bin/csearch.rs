@@ -17,9 +17,8 @@ extern crate libcsearch;
 extern crate libvarint;
 
 use libcsearch::grep;
-
-use libcsearch::reader::regexp;
-use libcsearch::reader::read::IndexReader;
+use libcsearch::reader::IndexReader;
+use libcsearch::regexp::{RegexInfo, Query};
 
 use std::io::{self, Write};
 use std::collections::HashMap;
@@ -130,11 +129,11 @@ empty, $HOME/.csearchindex.
 
     // Find all possibly matching files using the pseudo-regexp
     let mut post = if matches.is_present("bruteforce") {
-        index_reader.query(regexp::Query::all(), None)
+        index_reader.query(Query::all(), None)
     } else {
         // Get the pseudo-regexp (built using trigrams)
         let expr = regex_syntax::Expr::parse(&pattern).unwrap();
-        let q = regexp::RegexInfo::new(&expr).query;
+        let q = RegexInfo::new(&expr).query;
 
         index_reader.query(q, None)
     };

@@ -1,6 +1,5 @@
-pub mod read;
-pub mod regexp;
+mod read;
 mod search;
 
 pub use self::read::IndexReader;
-pub use self::regexp::RegexInfo;
+pub use self::read::POST_ENTRY_SIZE;
