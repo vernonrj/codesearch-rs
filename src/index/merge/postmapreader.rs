@@ -4,10 +4,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-use index::reader::read::{IndexReader, POST_ENTRY_SIZE};
+use csearch::reader::read::{IndexReader, POST_ENTRY_SIZE};
 
 use index::profiling;
-use index::varint;
+use varint;
 
 use std::u32;
 

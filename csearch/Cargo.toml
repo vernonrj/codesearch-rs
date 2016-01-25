@@ -4,5 +4,11 @@ version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
+byteorder = "0.4.2"
+memmap = "0.2.3"
+num = "0.1.30"
 regex = "0.1.48"
 regex-syntax = "0.2.2"
+
+consts = { path = "../consts" }
+varint = { path = "../varint" }

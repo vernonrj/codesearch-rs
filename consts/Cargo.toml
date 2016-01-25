@@ -1,0 +1,6 @@
+[package]
+name = "consts"
+version = "0.1.0"
+authors = ["Vernon Jones <vernonrjones@gmail.com>"]
+
+[dependencies]

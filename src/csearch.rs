@@ -12,15 +12,17 @@ extern crate log;
 extern crate regex;
 extern crate regex_syntax;
 
+extern crate consts;
 extern crate csearch;
+extern crate varint;
 
 pub mod customlogger;
 pub mod index;
 
 use csearch::grep;
 
-use index::reader::regexp;
-use index::reader::read::IndexReader;
+use csearch::reader::regexp;
+use csearch::reader::read::IndexReader;
 
 use std::io::{self, Write};
 use std::collections::HashMap;

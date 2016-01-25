@@ -13,12 +13,12 @@ use std::io::{self, BufWriter, Write};
 use std::ffi::OsString;
 use std::mem;
 
-use index::varint;
+use varint;
 use index::tempfile::TempFile;
 use index::byteorder::{BigEndian, WriteBytesExt};
 use index::profiling;
 
-use index::{MAGIC, TRAILER_MAGIC};
+use consts::{MAGIC, TRAILER_MAGIC};
 
 use super::sparseset::SparseSet;
 use super::error::{IndexError, IndexErrorKind, IndexResult};

@@ -69,10 +69,10 @@ use std::fmt;
 use std::fmt::Debug;
 use std::io::Cursor;
 
-use index::varint;
-use index::TRAILER_MAGIC;
-use index::memmap::{Mmap, Protection};
-use index::byteorder::{BigEndian, ReadBytesExt};
+use consts::TRAILER_MAGIC;
+use memmap::{Mmap, Protection};
+use byteorder::{BigEndian, ReadBytesExt};
+use varint;
 
 use super::regexp::{Query, QueryOperation};
 use super::search;

@@ -8,11 +8,14 @@ extern crate chrono;
 extern crate clap;
 #[macro_use]
 extern crate log;
+extern crate varint;
+extern crate consts;
+extern crate csearch;
 
 mod customlogger;
 mod index;
 
-use index::reader::read::IndexReader;
+use csearch::reader::read::IndexReader;
 use index::writer::{IndexWriter, IndexErrorKind};
 use index::profiling;
 use log::LogLevelFilter;

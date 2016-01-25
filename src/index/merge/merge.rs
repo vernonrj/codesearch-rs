@@ -31,13 +31,13 @@
 // Copy the name index and posting list index into C's index and write the trailer.
 // Rename C's index onto the new index.
 
-use index::reader::read::IndexReader;
+use csearch::reader::read::IndexReader;
 use index::writer::{get_offset, copy_file};
 use index::profiling;
-use index;
 
 use index::tempfile::TempFile;
 use index::byteorder::{BigEndian, WriteBytesExt};
+use consts;
 
 use super::postmapreader::{IdRange, PostMapReader};
 use super::postdatawriter::PostDataWriter;
@@ -110,7 +110,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     }
     let num_name = new;
     let mut ix3 = BufWriter::new(try!(File::create(dest)));
-    try!(ix3.write(index::MAGIC.as_bytes()));
+    try!(ix3.write(consts::MAGIC.as_bytes()));
 
     let path_data = try!(get_offset(&mut ix3));
     let mut mi1 = 0;
@@ -203,7 +203,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     ix3.write_u32::<BigEndian>(post_data as u32).unwrap();
     ix3.write_u32::<BigEndian>(name_index as u32).unwrap();
     ix3.write_u32::<BigEndian>(post_index as u32).unwrap();
-    try!(ix3.write(index::TRAILER_MAGIC.as_bytes()));
+    try!(ix3.write(consts::TRAILER_MAGIC.as_bytes()));
     Ok(())
 }
 

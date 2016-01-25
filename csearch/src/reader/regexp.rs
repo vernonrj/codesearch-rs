@@ -8,7 +8,7 @@ use std::ops::{Deref, Range};
 use std::hash::Hash;
 
 // use regex::Regex;
-use index::regex_syntax::{Expr, Repeater, CharClass, ClassRange};
+use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
 
 /// Operation on a Query
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

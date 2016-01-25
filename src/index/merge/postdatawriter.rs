@@ -7,7 +7,7 @@
 use std::io::{self, Write, Seek, BufWriter};
 use std::u32;
 
-use index::varint;
+use varint;
 use index::writer::{WriteTrigram, get_offset};
 
 use index::byteorder::{BigEndian, WriteBytesExt};

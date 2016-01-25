@@ -10,16 +10,12 @@ extern crate regex_syntax;
 extern crate hprof;
 
 
-pub mod reader;
 pub mod writer;
 pub mod merge;
 pub mod profiling;
-mod varint;
 
 use std::env;
 
-pub const MAGIC: &'static str        = "csearch index 1\n";
-pub const TRAILER_MAGIC: &'static str = "\ncsearch trailr\n";
 
 pub fn csearch_index() -> String {
     env::var("CSEARCHINDEX")
