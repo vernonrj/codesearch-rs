@@ -24,9 +24,16 @@ use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PrintFormat {
+    Normal,
+    VisualStudio
+}
+
 #[derive(Debug)]
 pub struct MatchOptions {
     pub pattern: regex::Regex,
+    pub print_format: PrintFormat,
     pub print_count: bool,
     pub ignore_case: bool,
     pub files_with_matches_only: bool,
@@ -76,6 +83,9 @@ empty, $HOME/.csearchindex.
         .arg(clap::Arg::with_name("line-number")
              .short("n").long("line-number")
              .help("print line number with output lines"))
+        .arg(clap::Arg::with_name("visual-studio-format")
+             .long("format-vs")
+             .help("print lines in a format that can be parsed by Visual Studio 2008"))
         .arg(clap::Arg::with_name("NUM")
              .short("m").long("max-count")
              .takes_value(true)
@@ -113,6 +123,11 @@ empty, $HOME/.csearchindex.
     // combine cmdline options used for matching/output into a structure
     let match_options = MatchOptions {
         pattern: regex_pattern,
+        print_format: if matches.is_present("visual-studio-format") {
+            PrintFormat::VisualStudio
+        } else {
+            PrintFormat::Normal
+        },
         print_count: matches.is_present("count"),
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
@@ -228,20 +243,31 @@ impl<'a> LinePrinter<'a> {
     fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) -> io::Result<()> {
         self.increment_file_match(filename);
         if self.all_lines_printed() {
-            let mut out_line = String::new();
-            out_line.push_str(filename);
-            out_line.push_str(":");
-            if self.options.line_number {
-                out_line.push_str(&(result.line_number + 1).to_string()); // 0-based to 1-based
-                out_line.push_str(":");
-            }
-            out_line.push_str(&result.line);
+            let out_line = self.format_line(filename, result);
             writeln!(&mut std::io::stdout(), "{}", out_line)
         } else if self.only_filenames_printed() {
             return Ok(());
         } else {
             return Ok(());
         }
+    }
+    fn format_line(&self, filename: &str, result: &grep::grep::MatchResult) -> String {
+        let mut out_line = String::new();
+        out_line.push_str(filename);
+        if self.options.print_format == PrintFormat::VisualStudio {
+            out_line.push_str("(");
+        } else {
+            out_line.push_str(":");
+        }
+        if self.options.line_number {
+            out_line.push_str(&(result.line_number + 1).to_string()); // 0-based to 1-based
+            if self.options.print_format == PrintFormat::VisualStudio {
+                out_line.push_str(")");
+            }
+            out_line.push_str(":");
+        }
+        out_line.push_str(&result.line);
+        out_line
     }
 }
 
