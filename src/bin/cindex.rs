@@ -7,6 +7,7 @@
 extern crate clap;
 #[macro_use]
 extern crate log;
+extern crate walkdir;
 
 extern crate consts;
 extern crate libcindex;
@@ -19,32 +20,19 @@ extern crate libvarint;
 use libcsearch::reader::IndexReader;
 use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
+use walkdir::WalkDir;
 
 use std::collections::HashSet;
 use std::env;
-use std::path::{Path, PathBuf};
-use std::fs::{self, DirEntry, File, FileType};
-use std::io::{self, Write, BufRead, BufReader};
+use std::path::{Component, Path, PathBuf, Prefix};
+use std::fs::{self, File, FileType};
+use std::io::{Write, BufRead, BufReader};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::sync::mpsc;
 use std::ffi::OsString;
 use std::str::FromStr;
-
-fn walk_dir(dir: &Path, cb: &Fn(&DirEntry)) -> io::Result<()> {
-    if try!(fs::metadata(dir)).is_dir() {
-        for entry in try!(fs::read_dir(dir)) {
-            let entry = try!(entry);
-            if try!(fs::metadata(entry.path())).is_dir() {
-                try!(walk_dir(&entry.path(), cb));
-            } else {
-                cb(&entry);
-            }
-        }
-    }
-    Ok(())
-}
 
 #[cfg(not(unix))]
 fn is_regular_file(meta: FileType) -> bool {
@@ -56,6 +44,29 @@ fn is_regular_file(meta: FileType) -> bool {
     !meta.is_dir() && !meta.is_symlink()
         && !meta.is_fifo() && !meta.is_socket()
         && !meta.is_block_device() && !meta.is_char_device()
+}
+
+#[cfg(not(windows))]
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    p
+}
+
+#[cfg(windows)]
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    {
+        let mut parts = p.components();
+        let first = parts.next();
+        match first {
+            Some(Component::Prefix(p)) => match p.kind() {
+                Prefix::Verbatim(d) => Some(PathBuf::from(d).join(parts.as_path())),
+                Prefix::VerbatimDisk(c) => {
+                    Some(PathBuf::from(format!("{}:", c as char)).join(parts.as_path()))
+                },
+                _ => None
+            },
+            _ => None
+        }
+    }.unwrap_or(p)
 }
 
 fn get_value_from_matches<F: FromStr>(matches: &clap::ArgMatches, name: &str) -> Option<F> {
@@ -208,7 +219,9 @@ With no path arguments, cindex -reset removes the index.")
 
     let mut paths: Vec<PathBuf> = args.iter()
         .filter(|f| !f.is_empty())
-        .map(|f| env::current_dir().unwrap().join(f).canonicalize().unwrap())
+        .map(|f| env::current_dir().unwrap().join(f))
+        .map(|f| f.canonicalize().unwrap())
+        .map(strip_verbatim)
         .collect();
     paths.sort();
 
@@ -273,9 +286,13 @@ With no path arguments, cindex -reset removes the index.")
     for p in paths {
         info!("index {}", p.display());
         let tx = tx.clone();
-        walk_dir(Path::new(&p), &move |d: &DirEntry| {
-            tx.send(d.path().into_os_string()).unwrap();
-        }).unwrap();
+        let files = WalkDir::new(p).into_iter()
+            .filter_map(|d| d.ok())
+            .filter(|d| !d.file_type().is_dir());
+
+        for d in files {
+            tx.send(d.path().to_path_buf().into_os_string()).unwrap();
+        }
     }
     drop(tx);
     h.join().unwrap();

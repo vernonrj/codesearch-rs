@@ -88,7 +88,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         // Because we are iterating over the ix2 paths,
         // there can't be gaps, so it must start at i2.
         if (i2 as usize) < ix2.num_name && ix2.name(i2) < *path {
-            panic!("merge: inconsistent index");
+            panic!("merge: inconsistent index ({} < {})", ix2.name(i2), *path);
         }
         lo = i2;
         while (i2 as usize) < ix2.num_name && ix2.name(i2) < limit {
