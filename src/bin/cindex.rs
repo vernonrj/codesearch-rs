@@ -264,7 +264,7 @@ With no path arguments, cindex -reset removes the index.")
                     Ok(_) => (),
                     Err(ref e) => {
                         match e.kind() {
-                            IndexErrorKind::IoError(_) => panic!("{}: {}", Path::new(&f).display(), e),
+                            IndexErrorKind::IoError(_) => warn!("{}: {}", Path::new(&f).display(), e),
                             _ => {
                                 if log_skipped {
                                     warn!("{:?}: skipped. {}", f, e);
