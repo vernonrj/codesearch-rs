@@ -5,6 +5,7 @@
 
 #[macro_use]
 extern crate clap;
+extern crate regex;
 #[macro_use]
 extern crate log;
 extern crate walkdir;
@@ -20,11 +21,12 @@ extern crate libvarint;
 use libcsearch::reader::IndexReader;
 use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
+use regex::Regex;
 use walkdir::WalkDir;
 
 use std::collections::HashSet;
 use std::env;
-use std::path::{Component, Path, PathBuf, Prefix};
+use std::path::{Path, PathBuf};
 use std::fs::{self, File, FileType};
 use std::io::{Write, BufRead, BufReader};
 #[cfg(unix)]
@@ -169,7 +171,7 @@ With no path arguments, cindex -reset removes the index.")
     };
     libcustomlogger::init(max_log_level).unwrap();
 
-    let mut excludes: Vec<String> = vec![".csearchindex".to_string()];
+    let mut excludes: Vec<Regex> = vec![Regex::new(".csearchindex").unwrap()];
     let mut args = Vec::<String>::new();
 
     if let Some(p) = matches.value_of("path") {
@@ -202,7 +204,8 @@ With no path arguments, cindex -reset removes the index.")
     if let Some(exc_path_str) = matches.value_of("EXCLUDE_FILE") {
         let exclude_path = Path::new(exc_path_str);
         let f = BufReader::new(File::open(exclude_path).expect("exclude file open error"));
-        excludes.extend(f.lines().map(|f| f.unwrap().trim().to_string()));
+        excludes.extend(f.lines()
+                         .map(|f| Regex::new(f.unwrap().trim()).unwrap()));
     }
     if let Some(file_list_str) = matches.value_of("FILE") {
         let file_list = Path::new(file_list_str);
@@ -283,15 +286,18 @@ With no path arguments, cindex -reset removes the index.")
         libprofiling::print_profiling();
     });
 
-    for p in paths {
-        info!("index {}", p.display());
+    for each_path in paths {
+        info!("index {}", each_path.display());
         let tx = tx.clone();
-        let files = WalkDir::new(p).into_iter()
+        let files = WalkDir::new(each_path).into_iter()
             .filter_map(|d| d.ok())
             .filter(|d| !d.file_type().is_dir());
 
         for d in files {
-            tx.send(d.path().to_path_buf().into_os_string()).unwrap();
+            let p = d.path().to_path_buf();
+            if !excludes.iter().any(|r| r.is_match(&p.to_string_lossy())) {
+                tx.send(p.into_os_string()).unwrap();
+            }
         }
     }
     drop(tx);

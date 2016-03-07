@@ -9,7 +9,7 @@ homepage = "https://github.com/vernonrj/codesearch-rs"
 repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
-clap = "1.5.5"
+clap = "2.1"
 regex = "0.1.48"
 regex-syntax = "0.2.2"
 log = "0.3.5"
