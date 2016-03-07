@@ -31,6 +31,8 @@ use std::fs::{self, File, FileType};
 use std::io::{Write, BufRead, BufReader};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+#[cfg(windows)]
+use std::path::{Component, Prefix};
 use std::thread;
 use std::sync::mpsc;
 use std::ffi::OsString;
