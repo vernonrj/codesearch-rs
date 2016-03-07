@@ -28,11 +28,11 @@ use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::fs::{self, File, FileType};
-use std::io::{Write, BufRead, BufReader};
+use std::io::{self, Write, BufRead, BufReader};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(windows)]
-use std::path::{Component, Prefix};
+use std::path::Component;
 use std::thread;
 use std::sync::mpsc;
 use std::ffi::OsString;
@@ -50,27 +50,35 @@ fn is_regular_file(meta: FileType) -> bool {
         && !meta.is_block_device() && !meta.is_char_device()
 }
 
-#[cfg(not(windows))]
-fn strip_verbatim(p: PathBuf) -> PathBuf {
-    p
+#[cfg(windows)]
+fn normalize<P: AsRef<Path>>(p: P) -> io::Result<PathBuf> {
+    let mut out = try!(env::current_dir());
+    let mut it = p.as_ref().components();
+    // only drop current directory if the first part of p is a prefix (C:/) or root (/)
+    if let Some(c) = it.next() {
+        match c {
+            r @ Component::Prefix(_) | r @ Component::RootDir => {
+                out = PathBuf::new();
+                out.push(r.as_os_str());
+            },
+            r @ _ => out.push(r.as_os_str())
+        }
+    } else {
+        return Ok(out);
+    };
+    for each_part in it {
+        match each_part {
+            Component::CurDir => (),
+            Component::ParentDir => { out.pop(); },
+            r @ _ => out.push(r.as_os_str())
+        }
+    }
+    Ok(out)
 }
 
-#[cfg(windows)]
-fn strip_verbatim(p: PathBuf) -> PathBuf {
-    {
-        let mut parts = p.components();
-        let first = parts.next();
-        match first {
-            Some(Component::Prefix(p)) => match p.kind() {
-                Prefix::Verbatim(d) => Some(PathBuf::from(d).join(parts.as_path())),
-                Prefix::VerbatimDisk(c) => {
-                    Some(PathBuf::from(format!("{}:", c as char)).join(parts.as_path()))
-                },
-                _ => None
-            },
-            _ => None
-        }
-    }.unwrap_or(p)
+#[cfg(not(windows))]
+fn normalize<P: AsRef<Path>>(p: P) -> io::Result<PathBuf> {
+    fs::canonicalize(p.as_ref())
 }
 
 fn get_value_from_matches<F: FromStr>(matches: &clap::ArgMatches, name: &str) -> Option<F> {
@@ -225,8 +233,7 @@ With no path arguments, cindex -reset removes the index.")
     let mut paths: Vec<PathBuf> = args.iter()
         .filter(|f| !f.is_empty())
         .map(|f| env::current_dir().unwrap().join(f))
-        .map(|f| f.canonicalize().unwrap())
-        .map(strip_verbatim)
+        .map(|f| normalize(f).unwrap())
         .collect();
     paths.sort();
 
