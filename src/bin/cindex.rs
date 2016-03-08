@@ -5,6 +5,7 @@
 
 #[macro_use]
 extern crate clap;
+extern crate glob;
 extern crate regex;
 #[macro_use]
 extern crate log;
@@ -21,7 +22,6 @@ extern crate libvarint;
 use libcsearch::reader::IndexReader;
 use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
-use regex::Regex;
 use walkdir::WalkDir;
 
 use std::collections::HashSet;
@@ -181,7 +181,7 @@ With no path arguments, cindex -reset removes the index.")
     };
     libcustomlogger::init(max_log_level).unwrap();
 
-    let mut excludes: Vec<Regex> = vec![Regex::new(".csearchindex").unwrap()];
+    let mut excludes: Vec<glob::Pattern> = vec![glob::Pattern::new(".csearchindex").unwrap()];
     let mut args = Vec::<String>::new();
 
     if let Some(p) = matches.value_of("path") {
@@ -215,7 +215,7 @@ With no path arguments, cindex -reset removes the index.")
         let exclude_path = Path::new(exc_path_str);
         let f = BufReader::new(File::open(exclude_path).expect("exclude file open error"));
         excludes.extend(f.lines()
-                         .map(|f| Regex::new(f.unwrap().trim()).unwrap()));
+                         .map(|f| glob::Pattern::new(f.unwrap().trim()).unwrap()));
     }
     if let Some(file_list_str) = matches.value_of("FILE") {
         let file_list = Path::new(file_list_str);
@@ -304,7 +304,7 @@ With no path arguments, cindex -reset removes the index.")
 
         for d in files {
             let p = d.path().to_path_buf();
-            if !excludes.iter().any(|r| r.is_match(&p.to_string_lossy())) {
+            if !excludes.iter().any(|r| r.matches_path(&p)) {
                 tx.send(p.into_os_string()).unwrap();
             }
         }

@@ -1,6 +1,6 @@
 [package]
 name = "codesearch-rs"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 license = "BSD-3-Clause"
 description = "Tool for indexing then performing regular expression searches over large bodies of code"
@@ -10,6 +10,7 @@ repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
 clap = "2.1"
+glob = "0.2"
 regex = "0.1.48"
 regex-syntax = "0.2.2"
 log = "0.3.5"

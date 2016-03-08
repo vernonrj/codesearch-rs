@@ -113,23 +113,23 @@ pub struct MatchResult {
 impl Iterator for GrepIter {
     type Item = MatchResult;
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let maybe_next_line = self.open_file.next();
-            if maybe_next_line.is_none() {
-                return None;
-            }
-            let (line_number, next_line_result) = maybe_next_line.unwrap();
-            if let Err(cause) = next_line_result {
-                writeln!(&mut io::stderr(), "failed to read line: {}", cause).unwrap();
-                return None;
-            }
-            let line = next_line_result.unwrap();
-            if self.filter_line(&line) {
-                return Some(MatchResult {
-                    line: line.clone(),
-                    line_number: line_number
-                });
+        while let Some((line_number, next_line_result)) = self.open_file.next() {
+            match next_line_result {
+                Ok(ref l) if self.filter_line(&l) => {
+                    return Some(MatchResult {
+                        line: l.clone(),
+                        line_number: line_number
+                    });
+                },
+                Ok(_) => (), // no match
+                Err(cause) => {
+                    writeln!(&mut io::stderr(), "failed to read line: {}", cause).unwrap();
+                    // don't read any more of the file
+                    return None;
+                },
             }
         }
+        // done with file
+        None
     }
 }
