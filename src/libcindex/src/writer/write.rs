@@ -289,11 +289,12 @@ impl IndexWriter {
             try!(self.post_index.write_u32::<BigEndian>(offset as u32));
         }
         // NOTE: write last entry like how the go version works
+        let offset = try!(get_offset(&mut self.index)) - offset0;
         try!(self.index.write_trigram(0xffffff));           // END trigram
         try!(libvarint::write_uvarint(&mut self.index, 0));    // NUL byte for END postlist
         try!(self.post_index.write_trigram(0xffffff));      // END trigram
         try!(self.post_index.write_u32::<BigEndian>(0));    // nothing written
-        try!(self.post_index.write_u32::<BigEndian>(0));    // offset = 0
+        try!(self.post_index.write_u32::<BigEndian>(offset as u32));
 
         Ok(())
     }

@@ -46,9 +46,9 @@ impl<'a, I: 'a + Iterator<Item = PostEntry>> Iterator for TakeWhilePeek<'a, I> {
     }
 }
 
-pub fn to_diffs<'a, I: 'a + Iterator<Item = u32>>
-    (it: I)
-     -> Chain<Scan<I, u32, fn(&mut u32, u32) -> Option<u32>>, Once<u32>> {
+pub type DiffIter<I> = Chain<Scan<I, u32, fn(&mut u32, u32) -> Option<u32>>, Once<u32>>;
+
+pub fn to_diffs<'a, I: 'a + Iterator<Item = u32>>(it: I) -> DiffIter<I> {
     let f: fn(&mut u32, u32) -> Option<u32> = transform;
     it.scan(u32::MAX, f).chain(iter::once(0))
 }

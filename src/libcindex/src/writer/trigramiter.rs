@@ -63,10 +63,6 @@ impl<R: Read> Iterator for TrigramReader<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let c = match self.next_char() {
             Some(c) => c,
-            None if self.num_read > 0 && self.num_read < 3 => {
-                self.num_read = 0;
-                return Some(self.current_value);
-            }
             _ => return None,
         };
         self.current_value = ((1 << 24) - 1) & ((self.current_value << 8) | (c as u32));
