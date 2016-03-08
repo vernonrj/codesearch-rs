@@ -20,7 +20,7 @@ pub struct PostDataWriter<'a, W: 'a + Write + Seek> {
     count: u32,
     offset: u32,
     last: u32,
-    t: u32
+    t: u32,
 }
 
 impl<'a, W: Write + Seek> PostDataWriter<'a, W> {
@@ -33,7 +33,7 @@ impl<'a, W: Write + Seek> PostDataWriter<'a, W> {
             count: 0,
             offset: 0,
             last: 0,
-            t: 0
+            t: 0,
         })
     }
     pub fn trigram(&mut self, t: u32) {

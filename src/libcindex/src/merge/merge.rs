@@ -17,9 +17,9 @@
 // record the mapping from A's docids to C's docids, and also the mapping from
 // B's docids to C's docids.  Both mappings can be summarized in a table like
 //
-//	10-14 map to 20-24
-//	15-24 is deleted
-//	25-34 maps to 40-49
+// 	10-14 map to 20-24
+// 	15-24 is deleted
+// 	25-34 maps to 40-49
 //
 // The number of ranges will be at most the combined number of paths.
 // Also during the merge, write the name index to a temporary file as usual.
@@ -69,7 +69,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         }
         let mut lo = i1;
         let limit = {
-            let (l1, l2) = path.split_at(path.len()-1);
+            let (l1, l2) = path.split_at(path.len() - 1);
             assert!(l2.len() == 1);
             let l2_u = l2.chars().next().unwrap() as u8;
             l1.to_string() + &((l2_u + 1) as char).to_string()
@@ -80,10 +80,14 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
 
         // Record range before the shadow
         if old < lo {
-            map1.push(IdRange { low: old, high: lo, new: new});
+            map1.push(IdRange {
+                low: old,
+                high: lo,
+                new: new,
+            });
             new += lo - old;
         }
-        
+
         // Determine range defined by this path.
         // Because we are iterating over the ix2 paths,
         // there can't be gaps, so it must start at i2.
@@ -96,13 +100,21 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
         }
         let hi = i2;
         if lo < hi {
-            map2.push(IdRange { low: lo, high: hi, new: new });
+            map2.push(IdRange {
+                low: lo,
+                high: hi,
+                new: new,
+            });
             new += hi - lo;
         }
     }
 
     if (i1 as usize) < ix1.num_name {
-        map1.push(IdRange { low: i1, high: ix1.num_name as u32, new: new });
+        map1.push(IdRange {
+            low: i1,
+            high: ix1.num_name as u32,
+            new: new,
+        });
         new += (ix1.num_name as u32) - i1;
     }
     if (i2 as usize) < ix2.num_name {
@@ -148,7 +160,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     while new < num_name {
         let _frame = libprofiling::profile("merge: Merge list of names");
         if mi1 < map1.len() && map1[mi1].new == new {
-            for i in map1[mi1].low .. map1[mi1].high {
+            for i in map1[mi1].low..map1[mi1].high {
                 let name = ix1.name(i);
                 let new_offset: u32 = try!(get_offset(&mut ix3)) as u32;
                 name_index_file.write_u32::<BigEndian>(new_offset - (name_data as u32)).unwrap();
@@ -158,7 +170,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             }
             mi1 += 1;
         } else if mi2 < map2.len() && map2[mi2].new == new {
-            for i in map2[mi2].low .. map2[mi2].high {
+            for i in map2[mi2].low..map2[mi2].high {
                 let name = ix2.name(i);
                 let new_offset: u32 = try!(get_offset(&mut ix3)) as u32;
                 name_index_file.write_u32::<BigEndian>(new_offset - (name_data as u32)).unwrap();
@@ -171,7 +183,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
             panic!("merge: inconsistent index");
         }
     }
-    if ((new*4) as u64) != try!(get_offset(&mut name_index_file)) {
+    if ((new * 4) as u64) != try!(get_offset(&mut name_index_file)) {
         panic!("merge: inconsistent index");
     }
     name_index_file.write_u32::<BigEndian>(try!(get_offset(&mut ix3)) as u32).unwrap();
@@ -185,17 +197,19 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     // Name index
     let name_index = try!(get_offset(&mut ix3));
     name_index_file.seek(SeekFrom::Start(0)).unwrap();
-    copy_file(&mut ix3, &mut BufReader::new(name_index_file.into_inner().unwrap()));
+    copy_file(&mut ix3,
+              &mut BufReader::new(name_index_file.into_inner().unwrap()));
 
     // Posting list index
     let post_index = get_offset(&mut ix3).unwrap();
-    copy_file(&mut ix3, &mut BufReader::new(post_index_file.into_inner().unwrap()));
-    
-    trace!("path_data  = {}", path_data );
-    trace!("name_data  = {}", name_data );
-    trace!("post_data  = {}", post_data );
-    trace!("name_index = {}", name_index); 
-    trace!("post_index = {}", post_index); 
+    copy_file(&mut ix3,
+              &mut BufReader::new(post_index_file.into_inner().unwrap()));
+
+    trace!("path_data  = {}", path_data);
+    trace!("name_data  = {}", name_data);
+    trace!("post_data  = {}", post_data);
+    trace!("name_index = {}", name_index);
+    trace!("post_index = {}", post_index);
 
 
     ix3.write_u32::<BigEndian>(path_data as u32).unwrap();
@@ -209,8 +223,8 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
 
 fn merge_list_of_posting_lists(mut r1: PostMapReader,
                                mut r2: PostMapReader,
-                               ix3: &mut BufWriter<File>) -> io::Result<BufWriter<TempFile>>
-{
+                               ix3: &mut BufWriter<File>)
+                               -> io::Result<BufWriter<TempFile>> {
     // Merged list of posting lists.
     let mut w = try!(PostDataWriter::new(ix3));
 

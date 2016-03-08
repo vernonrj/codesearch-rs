@@ -29,7 +29,7 @@ pub fn get_offset<S: Seek>(seekable: &mut S) -> io::Result<u64> {
 /// Copies the data from a reader into a writer
 pub fn copy_file<R: Read + Seek, W: Write>(dest: &mut BufWriter<W>, src: &mut R) {
     src.seek(SeekFrom::Start(0)).unwrap();
-    let mut buf_src = BufReader::new(src); 
+    let mut buf_src = BufReader::new(src);
     loop {
         let length = if let Ok(b) = buf_src.fill_buf() {
             if b.len() == 0 {

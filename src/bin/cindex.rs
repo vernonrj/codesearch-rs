@@ -45,9 +45,8 @@ fn is_regular_file(meta: FileType) -> bool {
 
 #[cfg(unix)]
 fn is_regular_file(meta: FileType) -> bool {
-    !meta.is_dir() && !meta.is_symlink()
-        && !meta.is_fifo() && !meta.is_socket()
-        && !meta.is_block_device() && !meta.is_char_device()
+    !meta.is_dir() && !meta.is_symlink() && !meta.is_fifo() && !meta.is_socket() &&
+    !meta.is_block_device() && !meta.is_char_device()
 }
 
 #[cfg(windows)]
@@ -60,8 +59,8 @@ fn normalize<P: AsRef<Path>>(p: P) -> io::Result<PathBuf> {
             r @ Component::Prefix(_) | r @ Component::RootDir => {
                 out = PathBuf::new();
                 out.push(r.as_os_str());
-            },
-            r @ _ => out.push(r.as_os_str())
+            }
+            r @ _ => out.push(r.as_os_str()),
         }
     } else {
         return Ok(out);
@@ -69,8 +68,10 @@ fn normalize<P: AsRef<Path>>(p: P) -> io::Result<PathBuf> {
     for each_part in it {
         match each_part {
             Component::CurDir => (),
-            Component::ParentDir => { out.pop(); },
-            r @ _ => out.push(r.as_os_str())
+            Component::ParentDir => {
+                out.pop();
+            }
+            r @ _ => out.push(r.as_os_str()),
         }
     }
     Ok(out)
@@ -89,19 +90,14 @@ fn get_value_from_matches<F: FromStr>(matches: &clap::ArgMatches, name: &str) ->
             } else {
                 panic!("can't convert value '{}' to number", s);
             }
-        },
-        _ => None
+        }
+        _ => None,
     }
 }
 
-fn main() {
-    let matches = clap::App::new("cindex")
-        .version(&crate_version!()[..])
-        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
-        .about("
-cindex prepares the trigram index for use by csearch.  The index is the
-file named by $CSEARCHINDEX, or else $HOME/.csearchindex.
-
+const ABOUT: &'static str = "
+cindex prepares the trigram index for use by csearch.  The index
+is the file named by $CSEARCHINDEX, or else $HOME/.csearchindex.
 The simplest invocation is
 
 	cindex path...
@@ -109,7 +105,7 @@ The simplest invocation is
 which adds the file or directory tree named by each path to the index.
 For example:
 
-	cindex $HOME/src /usr/include
+    cindex $HOME/src /usr/include
 
 or, equivalently:
 
@@ -122,58 +118,71 @@ itself is a useful command to run in a nightly cron job.
 
 By default cindex adds the named paths to the index but preserves
 information about other paths that might already be indexed
-(the ones printed by cindex -list).  The -reset flag causes cindex to
+(the ones printed by cindex --list).  The --reset flag causes cindex to
 delete the existing index before indexing the new paths.
-With no path arguments, cindex -reset removes the index.")
-    .arg(clap::Arg::with_name("path")
-         .index(1)
-         .multiple(true)
-         .help("path to index"))
-    .arg(clap::Arg::with_name("list-paths")
-         .long("list")
-         .help("list indexed paths and exit"))
-    .arg(clap::Arg::with_name("reset-index")
-         .long("reset")
-         .conflicts_with("path").conflicts_with("list-paths")
-         .help("discard existing index"))
-    .arg(clap::Arg::with_name("INDEX_FILE")
-         .long("indexpath")
-         .takes_value(true)
-         .help("use specified INDEX_FILE as the index path. overrides $CSEARCHINDEX"))
-    .arg(clap::Arg::with_name("no-follow-simlinks")
-         .long("no-follow-simlinks")
-         .help("do not follow symlinked files and directories"))
-    .arg(clap::Arg::with_name("MAX_FILE_SIZE_BYTES")
-         .long("maxFileLen")
-         .takes_value(true)
-         .help("skip indexing a file if longer than this size in bytes"))
-    .arg(clap::Arg::with_name("MAX_LINE_LEN_BYTES")
-         .long("maxLineLen")
-         .takes_value(true)
-         .help("skip indexing a file if it has a line longer than this size in bytes"))
-    .arg(clap::Arg::with_name("MAX_TRIGRAMS_COUNT")
-         .long("maxtrigrams")
-         .takes_value(true)
-         .help("skip indexing a file if it has more than this number of trigrams"))
-    .arg(clap::Arg::with_name("MAX_INVALID_UTF8_RATIO")
-         .long("maxinvalidutf8ratio")
-         .takes_value(true)
-         .help("skip indexing a file if it has more than this ratio of invalid UTF-8 sequences"))
-    .arg(clap::Arg::with_name("EXCLUDE_FILE")
-         .long("exclude")
-         .takes_value(true)
-         .help("path to file containing a list of file patterns to exclude from indexing"))
-    .arg(clap::Arg::with_name("FILE")
-         .long("filelist")
-         .takes_value(true)
-         .help("path to file containing a list of file paths to index"))
-    .arg(clap::Arg::with_name("verbose")
-         .long("verbose")
-         .help("print extra information"))
-    .arg(clap::Arg::with_name("logskip")
-         .long("logskip")
-         .help("print why a file was skipped from indexing"))
-    .get_matches();
+With no path arguments, cindex -reset removes the index.";
+
+fn main() {
+    let matches = clap::App::new("cindex")
+                      .version(&crate_version!()[..])
+                      .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright \
+                               2011 the Go authors)")
+                      .about(ABOUT)
+                      .arg(clap::Arg::with_name("path")
+                               .index(1)
+                               .multiple(true)
+                               .help("path to index"))
+                      .arg(clap::Arg::with_name("list-paths")
+                               .long("list")
+                               .help("list indexed paths and exit"))
+                      .arg(clap::Arg::with_name("reset-index")
+                               .long("reset")
+                               .conflicts_with("path")
+                               .conflicts_with("list-paths")
+                               .help("discard existing index"))
+                      .arg(clap::Arg::with_name("INDEX_FILE")
+                               .long("indexpath")
+                               .takes_value(true)
+                               .help("use specified INDEX_FILE as the index path. overrides \
+                                      $CSEARCHINDEX"))
+                      .arg(clap::Arg::with_name("no-follow-simlinks")
+                               .long("no-follow-simlinks")
+                               .help("do not follow symlinked files and directories"))
+                      .arg(clap::Arg::with_name("MAX_FILE_SIZE_BYTES")
+                               .long("maxFileLen")
+                               .takes_value(true)
+                               .help("skip indexing a file if longer than this size in bytes"))
+                      .arg(clap::Arg::with_name("MAX_LINE_LEN_BYTES")
+                               .long("maxLineLen")
+                               .takes_value(true)
+                               .help("skip indexing a file if it has a line longer than this \
+                                      size in bytes"))
+                      .arg(clap::Arg::with_name("MAX_TRIGRAMS_COUNT")
+                               .long("maxtrigrams")
+                               .takes_value(true)
+                               .help("skip indexing a file if it has more than this number of \
+                                      trigrams"))
+                      .arg(clap::Arg::with_name("MAX_INVALID_UTF8_RATIO")
+                               .long("maxinvalidutf8ratio")
+                               .takes_value(true)
+                               .help("skip indexing a file if it has more than this ratio of \
+                                      invalid UTF-8 sequences"))
+                      .arg(clap::Arg::with_name("EXCLUDE_FILE")
+                               .long("exclude")
+                               .takes_value(true)
+                               .help("path to file containing a list of file patterns to \
+                                      exclude from indexing"))
+                      .arg(clap::Arg::with_name("FILE")
+                               .long("filelist")
+                               .takes_value(true)
+                               .help("path to file containing a list of file paths to index"))
+                      .arg(clap::Arg::with_name("verbose")
+                               .long("verbose")
+                               .help("print extra information"))
+                      .arg(clap::Arg::with_name("logskip")
+                               .long("logskip")
+                               .help("print why a file was skipped from indexing"))
+                      .get_matches();
 
     let max_log_level = if matches.is_present("verbose") {
         LogLevelFilter::Trace
@@ -188,7 +197,7 @@ With no path arguments, cindex -reset removes the index.")
     if let Some(p) = matches.values_of("path") {
         args.extend(p.map(String::from));
     }
-    
+
     matches.value_of("INDEX_FILE").map(|p| {
         env::set_var("CSEARCHINDEX", p);
     });
@@ -233,10 +242,10 @@ With no path arguments, cindex -reset removes the index.")
     }
 
     let mut paths: Vec<PathBuf> = args.iter()
-        .filter(|f| !f.is_empty())
-        .map(|f| env::current_dir().unwrap().join(f))
-        .map(|f| normalize(f).unwrap())
-        .collect();
+                                      .filter(|f| !f.is_empty())
+                                      .map(|f| env::current_dir().unwrap().join(f))
+                                      .map(|f| normalize(f).unwrap())
+                                      .collect();
     paths.sort();
 
     let mut index_path = libcsearch::csearch_index();
@@ -256,7 +265,7 @@ With no path arguments, cindex -reset removes the index.")
         let mut seen = HashSet::<OsString>::new();
         let mut i = match IndexWriter::new(index_path_cloned) {
             Ok(i) => i,
-            Err(e) => panic!("IndexWriter: {}", e)
+            Err(e) => panic!("IndexWriter: {}", e),
         };
         if let Some(t) = get_value_from_matches::<u64>(&matches, "MAX_TRIGRAMS_COUNT") {
             i.max_trigram_count = t;
@@ -278,7 +287,9 @@ With no path arguments, cindex -reset removes the index.")
                     Ok(_) => (),
                     Err(ref e) => {
                         match e.kind() {
-                            IndexErrorKind::IoError(_) => warn!("{}: {}", Path::new(&f).display(), e),
+                            IndexErrorKind::IoError(_) => {
+                                warn!("{}: {}", Path::new(&f).display(), e)
+                            }
                             _ => {
                                 if log_skipped {
                                     warn!("{:?}: skipped. {}", f, e);
@@ -300,9 +311,10 @@ With no path arguments, cindex -reset removes the index.")
     for each_path in paths {
         info!("index {}", each_path.display());
         let tx = tx.clone();
-        let files = WalkDir::new(each_path).into_iter()
-            .filter_map(|d| d.ok())
-            .filter(|d| !d.file_type().is_dir());
+        let files = WalkDir::new(each_path)
+                        .into_iter()
+                        .filter_map(|d| d.ok())
+                        .filter(|d| !d.file_type().is_dir());
 
         for d in files {
             let p = d.path().to_path_buf();

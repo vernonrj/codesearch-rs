@@ -8,12 +8,12 @@ use super::postentry::PostEntry;
 
 
 
-pub struct TakeWhilePeek<'a, I: 'a + Iterator<Item=PostEntry>> {
+pub struct TakeWhilePeek<'a, I: 'a + Iterator<Item = PostEntry>> {
     trigram: u32,
-    it: &'a mut Peekable<I>
+    it: &'a mut Peekable<I>,
 }
 
-impl<'a, I: 'a + Iterator<Item=PostEntry>> TakeWhilePeek<'a, I> {
+impl<'a, I: 'a + Iterator<Item = PostEntry>> TakeWhilePeek<'a, I> {
     pub fn new(it: &'a mut Peekable<I>) -> Option<Self> {
         let t = if let Some(entry) = it.peek() {
             entry.trigram()
@@ -22,13 +22,15 @@ impl<'a, I: 'a + Iterator<Item=PostEntry>> TakeWhilePeek<'a, I> {
         };
         Some(TakeWhilePeek {
             trigram: t,
-            it: it
+            it: it,
         })
     }
-    pub fn trigram(&self) -> u32 { self.trigram }
+    pub fn trigram(&self) -> u32 {
+        self.trigram
+    }
 }
 
-impl<'a, I: 'a + Iterator<Item=PostEntry>> Iterator for TakeWhilePeek<'a, I> {
+impl<'a, I: 'a + Iterator<Item = PostEntry>> Iterator for TakeWhilePeek<'a, I> {
     type Item = PostEntry;
     fn next(&mut self) -> Option<Self::Item> {
         let t = if let Some(entry) = self.it.peek() {
@@ -44,9 +46,9 @@ impl<'a, I: 'a + Iterator<Item=PostEntry>> Iterator for TakeWhilePeek<'a, I> {
     }
 }
 
-pub fn to_diffs<'a, I: 'a + Iterator<Item=u32>>(it: I)
-        -> Chain<Scan<I, u32, fn(&mut u32, u32) -> Option<u32>>, Once<u32>>
-{
+pub fn to_diffs<'a, I: 'a + Iterator<Item = u32>>
+    (it: I)
+     -> Chain<Scan<I, u32, fn(&mut u32, u32) -> Option<u32>>, Once<u32>> {
     let f: fn(&mut u32, u32) -> Option<u32> = transform;
     it.scan(u32::MAX, f).chain(iter::once(0))
 }
@@ -87,9 +89,7 @@ fn test_to_diffs() {
 
 #[test]
 fn test_dont_consume_next_trigram() {
-    let v = vec![PostEntry::new(100, 1),
-                 PostEntry::new(100, 6),
-                 PostEntry::new(101, 8)];
+    let v = vec![PostEntry::new(100, 1), PostEntry::new(100, 6), PostEntry::new(101, 8)];
     let mut it = v.clone().into_iter().peekable();
     {
         let chunk = TakeWhilePeek::new(&mut it).unwrap();

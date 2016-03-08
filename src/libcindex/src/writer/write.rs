@@ -53,7 +53,6 @@ const MAX_LINE_LEN: u64 = 2000;
 
 
 pub struct IndexWriter {
-
     /// Max number of allowed trigrams in a file
     pub max_trigram_count: u64,
     /// Max percentage of invalid utf-8 sequences allowed
@@ -79,7 +78,7 @@ pub struct IndexWriter {
     post_files: Vec<Vec<PostEntry>>,
     post_index: BufWriter<TempFile>,
 
-    index: BufWriter<File>
+    index: BufWriter<File>,
 }
 
 impl IndexWriter {
@@ -106,7 +105,7 @@ impl IndexWriter {
             post: Vec::with_capacity(NPOST),
             post_files: Vec::new(),
             post_index: try!(make_temp_buf()),
-            index: BufWriter::with_capacity(256 << 10, f)
+            index: BufWriter::with_capacity(256 << 10, f),
         })
     }
 
@@ -114,7 +113,7 @@ impl IndexWriter {
     /// Note that this only writes the names of the paths into
     /// the index, it doesn't actually walk those directories.
     /// See `IndexWriter::add_file` for that.
-    pub fn add_paths<I: IntoIterator<Item=OsString>>(&mut self, paths: I) {
+    pub fn add_paths<I: IntoIterator<Item = OsString>>(&mut self, paths: I) {
         self.paths.extend(paths);
     }
 
@@ -145,7 +144,8 @@ impl IndexWriter {
         if size > self.max_file_len {
             return Err(IndexError::new(IndexErrorKind::FileTooLong,
                                        format!("file too long, ignoring ({} > {})",
-                                               size, self.max_file_len)));
+                                               size,
+                                               self.max_file_len)));
         }
         self.trigram.clear();
         let max_utf8_invalid = ((size as f64) * self.max_utf8_invalid) as u64;
@@ -162,7 +162,8 @@ impl IndexWriter {
         if (self.trigram.len() as u64) > self.max_trigram_count {
             return Err(IndexError::new(IndexErrorKind::TooManyTrigrams,
                                        format!("Too many trigrams ({} > {})",
-                                               self.trigram.len(), self.max_trigram_count)));
+                                               self.trigram.len(),
+                                               self.max_trigram_count)));
 
         }
         debug!("{} {} {:?}", size, self.trigram.len(), filename.as_ref());
@@ -192,11 +193,10 @@ impl IndexWriter {
         let offset = try!(get_offset(&mut self.name_data));
         try!(self.name_index.write_u32::<BigEndian>(offset as u32));
 
-        let s = try!(filename
-                     .as_ref()
-                     .to_str()
-                     .ok_or(IndexError::new(IndexErrorKind::FileNameError,
-                                            "UTF-8 Conversion error")));
+        let s = try!(filename.as_ref()
+                             .to_str()
+                             .ok_or(IndexError::new(IndexErrorKind::FileNameError,
+                                                    "UTF-8 Conversion error")));
         try!(self.name_data.write(s.as_bytes()));
         try!(self.name_data.write_u8(0));
 
@@ -265,9 +265,11 @@ impl IndexWriter {
         let mut h = heap.into_iter().peekable();
         let offset0 = try!(get_offset(&mut self.index));
 
-        let _frame_write = libprofiling::profile("IndexWriter::merge_post: Generate/Write post index");
+        let _frame_write = libprofiling::profile("IndexWriter::merge_post: Generate/Write post \
+                                                  index");
         while let Some(plist) = TakeWhilePeek::new(&mut h) {
-            let _fname_write_to_index = libprofiling::profile("IndexWriter::merge_post: Write post index");
+            let _fname_write_to_index = libprofiling::profile("IndexWriter::merge_post: Write \
+                                                               post index");
             let offset = try!(get_offset(&mut self.index)) - offset0;
 
             // posting list
@@ -311,5 +313,3 @@ fn make_temp_buf() -> io::Result<BufWriter<TempFile>> {
     let w = try!(TempFile::new());
     Ok(BufWriter::with_capacity(256 << 10, w))
 }
-
-

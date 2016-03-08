@@ -13,7 +13,7 @@ const STARTING_DENSE_SIZE: usize = 10000;
 
 pub struct SparseSet {
     sparse: Vec<u32>,
-    dense: Vec<u32>
+    dense: Vec<u32>,
 }
 
 impl SparseSet {
@@ -22,7 +22,7 @@ impl SparseSet {
         unsafe { v.set_len(MAX_SIZE as usize) };
         SparseSet {
             sparse: v,
-            dense: Vec::with_capacity(STARTING_DENSE_SIZE)
+            dense: Vec::with_capacity(STARTING_DENSE_SIZE),
         }
     }
     pub fn insert(&mut self, x: u32) {
@@ -41,9 +41,15 @@ impl SparseSet {
     pub fn clear(&mut self) {
         self.dense.clear();
     }
-    pub fn len(&self) -> usize { self.dense.len() }
-    pub fn is_empty(&self) -> bool { self.dense.is_empty() }
-    pub fn into_vec(self) -> Vec<u32> { self.dense }
+    pub fn len(&self) -> usize {
+        self.dense.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.dense.is_empty()
+    }
+    pub fn into_vec(self) -> Vec<u32> {
+        self.dense
+    }
     pub fn take_dense(&mut self) -> Vec<u32> {
         let mut dense_new = Vec::with_capacity(STARTING_DENSE_SIZE);
         mem::swap(&mut dense_new, &mut self.dense);
@@ -67,7 +73,6 @@ impl<'a> IntoIterator for &'a SparseSet {
     fn into_iter(self) -> slice::Iter<'a, u32> {
         self.dense.iter()
     }
-
 }
 
 #[test]
@@ -87,7 +92,7 @@ fn test_insert() {
 #[test]
 fn test_insert_mult_unique() {
     let mut s = SparseSet::new();
-    for each in 0 .. 10 {
+    for each in 0..10 {
         s.insert(each);
     }
     assert!(s.len() == 10);

@@ -15,7 +15,7 @@ use std::u32;
 pub struct IdRange {
     pub low: u32,
     pub high: u32,
-    pub new: u32
+    pub new: u32,
 }
 
 pub struct PostMapReader<'a> {
@@ -28,7 +28,7 @@ pub struct PostMapReader<'a> {
     d: &'a [u8],
     old_id: u32,
     pub file_id: u32,
-    i: usize
+    i: usize,
 }
 
 impl<'a> PostMapReader<'a> {
@@ -45,7 +45,7 @@ impl<'a> PostMapReader<'a> {
             d: s,
             old_id: u32::MAX,
             file_id: 0,
-            i: 0
+            i: 0,
         };
         p.load();
         p
@@ -62,7 +62,8 @@ impl<'a> PostMapReader<'a> {
             self.file_id = u32::MAX;
             return;
         }
-        let (trigram, count, offset) = self.index.list_at((self.tri_num as usize) * POST_ENTRY_SIZE);
+        let (trigram, count, offset) = self.index
+                                           .list_at((self.tri_num as usize) * POST_ENTRY_SIZE);
         self.trigram = trigram;
         self.count = count;
         self.offset = offset;
@@ -102,5 +103,3 @@ impl<'a> PostMapReader<'a> {
         return false;
     }
 }
-
-

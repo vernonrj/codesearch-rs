@@ -7,13 +7,13 @@
 //
 // An index stored on disk has the format:
 //
-//	"csearch index 1\n"
-//	list of paths
-//	list of names
-//	list of posting lists
-//	name index
-//	posting list index
-//	trailer
+// 	"csearch index 1\n"
+// 	list of paths
+// 	list of names
+// 	list of posting lists
+// 	name index
+// 	posting list index
+// 	trailer
 //
 // The list of paths is a sorted sequence of NUL-terminated file or directory names.
 // The index covers the file trees rooted at those paths.
@@ -27,8 +27,8 @@
 // The list of posting lists are a sequence of posting lists.
 // Each posting list has the form:
 //
-//	trigram [3]
-//	deltas [v]...
+// 	trigram [3]
+// 	deltas [v]...
 //
 // The trigram gives the 3 byte trigram that this list describes.  The
 // delta list is a sequence of varint-encoded deltas between file
@@ -44,9 +44,9 @@
 // index is a sequence of index entries describing each successive
 // posting list.  Each index entry has the form:
 //
-//	trigram [3]
-//	file count [4]
-//	offset [4]
+// 	trigram [3]
+// 	file count [4]
+// 	offset [4]
 //
 // Index entries are only written for the non-empty posting lists,
 // so finding the posting list for a specific trigram requires a
@@ -56,12 +56,12 @@
 //
 // The trailer has the form:
 //
-//	offset of path list [4]
-//	offset of name list [4]
-//	offset of posting lists [4]
-//	offset of name index [4]
-//	offset of posting list index [4]
-//	"\ncsearch trailr\n"
+// 	offset of path list [4]
+// 	offset of name list [4]
+// 	offset of posting lists [4]
+// 	offset of name index [4]
+// 	offset of posting list index [4]
+// 	"\ncsearch trailr\n"
 
 use std::path::Path;
 use std::io;
@@ -115,20 +115,26 @@ pub struct IndexReader {
     name_index: usize,
     pub post_index: usize,
     pub num_name: usize,
-    pub num_post: usize
+    pub num_post: usize,
 }
 
 impl Debug for IndexReader {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "({}, {}, {}, {}, {}, {}, {}",
-               self.path_data, self.name_data, self.post_data,
-               self.name_index, self.post_index, self.num_name, self.num_post)
+        write!(f,
+               "({}, {}, {}, {}, {}, {}, {}",
+               self.path_data,
+               self.name_data,
+               self.post_data,
+               self.name_index,
+               self.post_index,
+               self.num_name,
+               self.num_post)
     }
 }
 
 fn extract_data_from_mmap(data: &Mmap, offset: usize) -> u32 {
     unsafe {
-        let mut buf = Cursor::new(&data.as_slice()[ offset .. offset + 4]);
+        let mut buf = Cursor::new(&data.as_slice()[offset..offset + 4]);
         buf.read_u32::<BigEndian>().unwrap()
     }
 }
@@ -137,7 +143,7 @@ fn extract_data_from_mmap(data: &Mmap, offset: usize) -> u32 {
 impl IndexReader {
     fn extract_data(&self, offset: usize) -> u32 {
         unsafe {
-            let mut buf = Cursor::new(&self.data.as_slice()[ offset .. offset + 4]);
+            let mut buf = Cursor::new(&self.data.as_slice()[offset..offset + 4]);
             buf.read_u32::<BigEndian>().unwrap()
         }
     }
@@ -151,35 +157,38 @@ impl IndexReader {
     /// # Ok(())
     /// # }
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<IndexReader> {
-        Mmap::open_path(path, Protection::Read)
-            .map(|m| {
-                let n = m.len() - (TRAILER_MAGIC.bytes().len()) - 5*4;
-                let path_data = extract_data_from_mmap(&m, n);
-                let name_data = extract_data_from_mmap(&m, n + 4);
-                let post_data = extract_data_from_mmap(&m, n + 8);
-                let name_index = extract_data_from_mmap(&m, n + 12) as usize;
-                let post_index = extract_data_from_mmap(&m, n + 16) as usize;
-                let num_name: usize = if post_index > name_index {
-                    let d = (post_index - name_index) / 4;
-                    if d == 0 { 0 } else { (d - 1) as usize }
-                } else {
+        Mmap::open_path(path, Protection::Read).map(|m| {
+            let n = m.len() - (TRAILER_MAGIC.bytes().len()) - 5 * 4;
+            let path_data = extract_data_from_mmap(&m, n);
+            let name_data = extract_data_from_mmap(&m, n + 4);
+            let post_data = extract_data_from_mmap(&m, n + 8);
+            let name_index = extract_data_from_mmap(&m, n + 12) as usize;
+            let post_index = extract_data_from_mmap(&m, n + 16) as usize;
+            let num_name: usize = if post_index > name_index {
+                let d = (post_index - name_index) / 4;
+                if d == 0 {
                     0
-                };
-                let num_post = if n > (post_index as usize) {
-                    (n - (post_index as usize)) / (3 + 4 + 4)
                 } else {
-                    0
-                };
-                IndexReader {
-                    data: m,
-                    path_data: path_data,
-                    name_data: name_data,
-                    post_data: post_data,
-                    name_index: name_index,
-                    post_index: post_index,
-                    num_name: num_name,
-                    num_post: num_post
+                    (d - 1) as usize
                 }
+            } else {
+                0
+            };
+            let num_post = if n > (post_index as usize) {
+                (n - (post_index as usize)) / (3 + 4 + 4)
+            } else {
+                0
+            };
+            IndexReader {
+                data: m,
+                path_data: path_data,
+                name_data: name_data,
+                post_data: post_data,
+                name_index: name_index,
+                post_index: post_index,
+                num_name: num_name,
+                num_post: num_post,
+            }
         })
     }
 
@@ -192,18 +201,17 @@ impl IndexReader {
                     return restrict.unwrap();
                 }
                 let mut v = Vec::<u32>::new();
-                for idx in 0 .. self.num_name {
+                for idx in 0..self.num_name {
                     v.push(idx as FileID);
                 }
                 v
-            },
+            }
             QueryOperation::And => {
                 let mut m_v: Option<Vec<FileID>> = None;
                 for trigram in query.trigram {
                     let bytes = trigram.as_bytes();
-                    let tri_val = (bytes[0] as u32) << 16
-                                | (bytes[1] as u32) << 8
-                                | (bytes[2] as u32);
+                    let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
+                                  (bytes[2] as u32);
                     if m_v.is_none() {
                         m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
                     } else {
@@ -228,14 +236,13 @@ impl IndexReader {
                     m_v = Some(v);
                 }
                 return m_v.unwrap_or(Vec::new());
-            },
+            }
             QueryOperation::Or => {
                 let mut m_v = None;
                 for trigram in query.trigram {
                     let bytes = trigram.as_bytes();
-                    let tri_val = (bytes[0] as u32) << 16
-                                | (bytes[1] as u32) << 8
-                                | (bytes[2] as u32);
+                    let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
+                                  (bytes[2] as u32);
                     if m_v.is_none() {
                         m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
                     } else {
@@ -290,15 +297,13 @@ impl IndexReader {
             let (d, _) = right_side.split_at(POST_ENTRY_SIZE);
             d
         };
-        let tri_val = (d[0] as u32) << 16
-                    | (d[1] as u32) << 8
-                    | (d[2] as u32);
+        let tri_val = (d[0] as u32) << 16 | (d[1] as u32) << 8 | (d[2] as u32);
         let count = {
             let (_, mut right) = d.split_at(3);
             right.read_u32::<BigEndian>().unwrap()
         };
         let offset = {
-            let (_, mut right) = d.split_at(3+4);
+            let (_, mut right) = d.split_at(3 + 4);
             right.read_u32::<BigEndian>().unwrap()
         };
         (tri_val, count, offset)
@@ -311,7 +316,7 @@ impl IndexReader {
         unsafe {
             let sl = self.as_slice();
             while sl[offset + index] != 0 {
-                s.push(sl[offset+index] as char);
+                s.push(sl[offset + index] as char);
                 index += 1;
             }
             s
@@ -328,27 +333,25 @@ impl IndexReader {
         };
         let result = search::search(self.num_post, |i| {
             let i_scaled = i * POST_ENTRY_SIZE;
-            let tri_val = (d[i_scaled] as u32) << 16
-                        | (d[i_scaled+1] as u32) << 8
-                        | (d[i_scaled+2] as u32);
+            let tri_val = (d[i_scaled] as u32) << 16 | (d[i_scaled + 1] as u32) << 8 |
+                          (d[i_scaled + 2] as u32);
             tri_val >= trigram
         });
         if result >= self.num_post {
             return (0, 0);
         }
         let result_scaled: usize = result * POST_ENTRY_SIZE;
-        let tri_val = (d[result_scaled] as u32) << 16
-                    | (d[result_scaled+1] as u32) << 8
-                    | (d[result_scaled+2] as u32);
+        let tri_val = (d[result_scaled] as u32) << 16 | (d[result_scaled + 1] as u32) << 8 |
+                      (d[result_scaled + 2] as u32);
         if tri_val != trigram {
             return (0, 0);
         }
         let count = {
-            let (_, mut right) = d.split_at(result_scaled+3);
+            let (_, mut right) = d.split_at(result_scaled + 3);
             right.read_i32::<BigEndian>().unwrap() as isize
         };
         let offset = {
-            let (_, mut right) = d.split_at(result_scaled+3+4);
+            let (_, mut right) = d.split_at(result_scaled + 3 + 4);
             right.read_u32::<BigEndian>().unwrap()
         };
         (count, offset)
@@ -360,19 +363,19 @@ fn merge_or(l1: Vec<u32>, l2: Vec<u32>) -> Vec<u32> {
     let mut i = 0;
     let mut j = 0;
     while i < l1.len() || j < l2.len() {
-		if j == l2.len() || i < l1.len() && l1[i] < l2[j] {
-			l.push(l1[i]);
-			i += 1;
+        if j == l2.len() || i < l1.len() && l1[i] < l2[j] {
+            l.push(l1[i]);
+            i += 1;
         } else if i == l1.len() || (j < l2.len() && l1[i] > l2[j]) {
-			l.push(l2[j]);
-			j += 1;
+            l.push(l2[j]);
+            j += 1;
         } else if l1[i] == l2[j] {
-			l.push(l1[i]);
-			i += 1;
-			j += 1;
-		}
-	}
-	return l;
+            l.push(l1[i]);
+            i += 1;
+            j += 1;
+        }
+    }
+    return l;
 }
 
 #[derive(Debug)]
@@ -382,14 +385,14 @@ struct PostReader<'a, 'b> {
     offset: u32,
     fileid: i64,
     d: &'a [u8],
-    restrict: &'b mut Option<Vec<u32>>
+    restrict: &'b mut Option<Vec<u32>>,
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
     pub fn new(index: &'a IndexReader,
                trigram: u32,
-               restrict: &'b mut Option<Vec<u32>>) -> Option<Self>
-    {
+               restrict: &'b mut Option<Vec<u32>>)
+               -> Option<Self> {
         let (count, offset) = index.find_list(trigram);
         if count == 0 {
             return None;
@@ -405,14 +408,14 @@ impl<'a, 'b> PostReader<'a, 'b> {
             offset: offset,
             fileid: -1,
             d: view,
-            restrict: restrict
+            restrict: restrict,
         })
     }
     pub fn and(index: &'a IndexReader,
                list: Vec<u32>,
                trigram: u32,
-               restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
-    {
+               restrict: &'b mut Option<Vec<u32>>)
+               -> Vec<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut v = Vec::new();
             let mut i = 0;
@@ -435,8 +438,8 @@ impl<'a, 'b> PostReader<'a, 'b> {
     pub fn or(index: &'a IndexReader,
               list: Vec<u32>,
               trigram: u32,
-              restrict: &'b mut Option<Vec<u32>>) -> Vec<u32>
-    {
+              restrict: &'b mut Option<Vec<u32>>)
+              -> Vec<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut v = Vec::new();
             let mut i = 0;
@@ -451,7 +454,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
                     i += 1;
                 }
             }
-            v.extend(&list[i ..]);
+            v.extend(&list[i..]);
             v
         } else {
             Vec::new()
@@ -468,7 +471,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             Vec::new()
         }
     }
-    // TODO: refactor either to use rust iterator or don't look like an iterator
+    // FIXME: refactor either to use rust iterator or don't look like an iterator
     fn next(&mut self) -> bool {
         while self.count > 0 {
             self.count -= 1;
@@ -487,14 +490,13 @@ impl<'a, 'b> PostReader<'a, 'b> {
                 }
             }
             if !is_fileid_found {
-                continue
+                continue;
             }
             return true;
         }
         // list should end with terminating 0 delta
-        // TODO: add bounds checking
+        // FIXME: add bounds checking
         self.fileid = -1;
         return false;
     }
 }
-

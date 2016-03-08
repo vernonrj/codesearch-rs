@@ -34,7 +34,7 @@ use std::path::Path;
  *
  */
 pub struct Grep {
-    expression: Regex
+    expression: Regex,
 }
 
 impl Grep {
@@ -50,9 +50,7 @@ impl Grep {
     /// # }
     /// ```
     pub fn new(expression: Regex) -> Self {
-        Grep {
-            expression: expression
-        }
+        Grep { expression: expression }
     }
 
     /// Takes a filename and returns a GrepIter. Fails if the file open fails.
@@ -75,7 +73,7 @@ impl Grep {
             GrepIter {
                 expression: self.expression.clone(),
                 open_file: BufReader::new(f),
-                line_number: 0
+                line_number: 0,
             }
         })
     }
@@ -89,7 +87,7 @@ impl Grep {
 pub struct GrepIter {
     expression: Regex,
     open_file: BufReader<File>,
-    line_number: usize
+    line_number: usize,
 }
 
 impl GrepIter {
@@ -109,7 +107,7 @@ pub struct MatchResult {
     pub line: String,
 
     /// The line number of the line that matched
-    pub line_number: usize
+    pub line_number: usize,
 }
 
 impl Iterator for GrepIter {
@@ -127,7 +125,7 @@ impl Iterator for GrepIter {
                 if self.filter_line(&line) {
                     return Some(MatchResult {
                         line: line.into_owned(),
-                        line_number: self.line_number
+                        line_number: self.line_number,
                     });
                 }
             }

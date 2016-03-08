@@ -23,7 +23,7 @@ pub struct TrigramReader<R: Read> {
     line_len: u64,
     max_line_len: u64,
 
-    error: Option<IndexResult<()>>
+    error: Option<IndexResult<()>>,
 }
 
 impl<R: Read> TrigramReader<R> {
@@ -40,7 +40,7 @@ impl<R: Read> TrigramReader<R> {
             max_invalid: max_invalid,
             line_len: 0,
             max_line_len: max_line_len,
-            error: None
+            error: None,
         }
     }
     fn next_char(&mut self) -> Option<u8> {
@@ -48,12 +48,12 @@ impl<R: Read> TrigramReader<R> {
             Some(Err(e)) => {
                 self.error = Some(Err(e.into()));
                 None
-            },
+            }
             Some(Ok(c)) => {
                 self.num_read += 1;
                 Some(c)
-            },
-            None => None
+            }
+            None => None,
         }
     }
 }
@@ -66,8 +66,8 @@ impl<R: Read> Iterator for TrigramReader<R> {
             None if self.num_read > 0 && self.num_read < 3 => {
                 self.num_read = 0;
                 return Some(self.current_value);
-            },
-            _ => return None
+            }
+            _ => return None,
         };
         self.current_value = ((1 << 24) - 1) & ((self.current_value << 8) | (c as u32));
         if self.num_read < 3 {
@@ -79,16 +79,21 @@ impl<R: Read> Iterator for TrigramReader<R> {
         if b1 == 0x00 || b2 == 0x00 {
             // Binary file. Skip
             self.error = Some(Err(IndexError::new(IndexErrorKind::BinaryDataPresent,
-                                                  format!("Binary File. Bytes {:02x}{:02x} at offset {}",
-                                                          b1, b2, self.num_read))));
+                                                  format!("Binary File. Bytes {:02x}{:02x} at \
+                                                           offset {}",
+                                                          b1,
+                                                          b2,
+                                                          self.num_read))));
             None
         } else if !valid_utf8(b1, b2) {
             // invalid utf8 data
             self.inv_cnt += 1;
             if self.inv_cnt > self.max_invalid {
                 let e = IndexError::new(IndexErrorKind::HighInvalidUtf8Ratio,
-                                        format!("High invalid UTF-8 ratio. total {} invalid: {} ratio: {}",
-                                                self.num_read, self.inv_cnt,
+                                        format!("High invalid UTF-8 ratio. total {} invalid: {} \
+                                                 ratio: {}",
+                                                self.num_read,
+                                                self.inv_cnt,
                                                 (self.inv_cnt as f64) / (self.num_read as f64)));
                 self.error = Some(Err(e));
                 None
@@ -99,11 +104,12 @@ impl<R: Read> Iterator for TrigramReader<R> {
         } else if self.line_len > self.max_line_len {
             let e = IndexError::new(IndexErrorKind::LineTooLong,
                                     format!("Line too long ({} > {})",
-                                    self.line_len, self.max_line_len));
+                                            self.line_len,
+                                            self.max_line_len));
             self.error = Some(Err(e));
             None
         } else {
-            if c == ('\n' as u8) { 
+            if c == ('\n' as u8) {
                 self.line_len = 0;
             } else {
                 self.line_len += 1;
@@ -132,24 +138,15 @@ fn valid_utf8(c1: u8, c2: u8) -> bool {
 #[test]
 fn test_trigram_iter_once() {
     let c = TrigramReader::new("hello".as_bytes(), 0, 100).next().unwrap();
-    let hel =   ('h' as u32) << 16
-              | ('e' as u32) << 8
-              | ('l' as u32);
+    let hel = ('h' as u32) << 16 | ('e' as u32) << 8 | ('l' as u32);
     assert_eq!(c, hel);
 }
 
 #[test]
 pub fn test_trigram_iter() {
-    let trigrams: Vec<u32> = TrigramReader::new("hello".as_bytes(), 0, 100)
-        .collect();
-    let hel =   ('h' as u32) << 16
-              | ('e' as u32) << 8
-              | ('l' as u32);
-    let ell =   ('e' as u32) << 16
-              | ('l' as u32) << 8
-              | ('l' as u32);
-    let llo =   ('l' as u32) << 16
-              | ('l' as u32) << 8
-              | ('o' as u32);
-    assert_eq!(trigrams, vec![hel,ell,llo]);
+    let trigrams: Vec<u32> = TrigramReader::new("hello".as_bytes(), 0, 100).collect();
+    let hel = ('h' as u32) << 16 | ('e' as u32) << 8 | ('l' as u32);
+    let ell = ('e' as u32) << 16 | ('l' as u32) << 8 | ('l' as u32);
+    let llo = ('l' as u32) << 16 | ('l' as u32) << 8 | ('o' as u32);
+    assert_eq!(trigrams, vec![hel, ell, llo]);
 }

@@ -7,7 +7,7 @@ use super::postentry::PostEntry;
 struct PostChunk {
     e: PostEntry,
     m: vec::IntoIter<PostEntry>,
-    size: usize
+    size: usize,
 }
 
 impl PostChunk {
@@ -21,7 +21,7 @@ impl PostChunk {
             Some(PostChunk {
                 e: e,
                 m: m,
-                size: size
+                size: size,
             })
         }
     }
@@ -53,14 +53,12 @@ impl Iterator for PostChunk {
 }
 
 pub struct PostHeap {
-    ch: Vec<PostChunk>
+    ch: Vec<PostChunk>,
 }
 
 impl PostHeap {
     pub fn new() -> PostHeap {
-        PostHeap {
-            ch: Vec::new()
-        }
+        PostHeap { ch: Vec::new() }
     }
     pub fn add_mem(&mut self, v: Vec<PostEntry>) {
         let _frame = libprofiling::profile("PostHeap::add_mem");
@@ -84,7 +82,7 @@ impl PostHeap {
         let mut ch = &mut self.ch;
         let len = ch.len();
         loop {
-            let j1 = 2*i + 1;
+            let j1 = 2 * i + 1;
             if j1 >= len {
                 break;
             }
@@ -123,14 +121,14 @@ impl IntoIterator for PostHeap {
 
 pub struct IntoIter {
     inner: PostHeap,
-    place: usize
+    place: usize,
 }
 
 impl IntoIter {
     pub fn new(inner: PostHeap) -> Self {
         IntoIter {
             inner: inner,
-            place: 0
+            place: 0,
         }
     }
 }
@@ -163,7 +161,8 @@ fn test_postchunk_empty() {
 fn test_postchunk_sized() {
     let c = PostChunk::new(vec![PostEntry::new(0, 32),
                                 PostEntry::new(1, 32),
-                                PostEntry::new(3, 35)]).unwrap();
+                                PostEntry::new(3, 35)])
+                .unwrap();
     assert!(!c.is_empty());
     assert_eq!(c.len(), 3);
 }
@@ -172,7 +171,8 @@ fn test_postchunk_sized() {
 fn test_postchunk_iter() {
     let mut c = PostChunk::new(vec![PostEntry::new(0, 32),
                                     PostEntry::new(1, 32),
-                                    PostEntry::new(3, 35)]).unwrap();
+                                    PostEntry::new(3, 35)])
+                    .unwrap();
     assert_eq!(c.next(), Some(PostEntry::new(0, 32)));
     assert_eq!(c.next(), Some(PostEntry::new(1, 32)));
     assert_eq!(c.next(), Some(PostEntry::new(3, 35)));
@@ -189,8 +189,7 @@ mod tests {
     #[test]
     fn test_postheap_add_mem() {
         let mut p = PostHeap::new();
-        p.add_mem(vec![PostEntry::new(0, 32),
-                       PostEntry::new(5, 32)]);
+        p.add_mem(vec![PostEntry::new(0, 32), PostEntry::new(5, 32)]);
         assert!(!p.ch.is_empty());
         assert_eq!(p.ch.len(), 1);
     }

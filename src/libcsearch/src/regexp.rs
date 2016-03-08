@@ -16,7 +16,7 @@ pub enum QueryOperation {
     All,
     None,
     And,
-    Or
+    Or,
 }
 
 pub type Trigram = String;
@@ -27,7 +27,7 @@ pub type Trigram = String;
 pub struct Query {
     pub operation: QueryOperation,
     pub trigram: HashSet<Trigram>,
-    pub sub: Vec<Query>
+    pub sub: Vec<Query>,
 }
 
 impl Default for Query {
@@ -35,7 +35,7 @@ impl Default for Query {
         Query {
             operation: QueryOperation::All,
             trigram: HashSet::new(),
-            sub: Vec::new()
+            sub: Vec::new(),
         }
     }
 }
@@ -45,7 +45,7 @@ impl Query {
         Query {
             operation: operation,
             trigram: HashSet::new(),
-            sub: Vec::new()
+            sub: Vec::new(),
         }
     }
     // pub fn from_regex(expr: Regex) -> Query {
@@ -54,33 +54,34 @@ impl Query {
     //         .add_exact()
     //         .query
     // }
-    pub fn all() -> Query { Query::new(QueryOperation::All) }
-    pub fn none() -> Query { Query::new(QueryOperation::None) }
+    pub fn all() -> Query {
+        Query::new(QueryOperation::All)
+    }
+    pub fn none() -> Query {
+        Query::new(QueryOperation::None)
+    }
     pub fn implies(&self, rhs: &Query) -> bool {
         match (self.operation, rhs.operation) {
             (QueryOperation::None, _) | (_, QueryOperation::All) => {
                 // False implies everything.
                 // Everything implies True.
                 return true;
-            },
+            }
             (QueryOperation::All, _) | (_, QueryOperation::None) => {
                 // True implies nothing.
                 // Nothing implies False.
                 return false;
-            },
-            (_, _) => ()
+            }
+            (_, _) => (),
         }
-        if self.operation == QueryOperation::And
-            || (self.operation == QueryOperation::Or
-                && self.trigram.len() == 1
-                && self.sub.len() == 0)
-        {
+        if self.operation == QueryOperation::And ||
+           (self.operation == QueryOperation::Or && self.trigram.len() == 1 &&
+            self.sub.len() == 0) {
             return trigrams_imply(&self.trigram, rhs);
         }
-        if self.operation == QueryOperation::Or && rhs.operation == QueryOperation::Or
-            && self.trigram.len() > 0 && self.sub.len() == 0
-            && self.trigram.is_subset(&rhs.trigram)
-        {
+        if self.operation == QueryOperation::Or && rhs.operation == QueryOperation::Or &&
+           self.trigram.len() > 0 && self.sub.len() == 0 &&
+           self.trigram.is_subset(&rhs.trigram) {
             return true;
         }
         return false;
@@ -109,28 +110,29 @@ pub struct RegexInfo {
     pub exact_set: Option<HashSet<String>>,
     pub prefix: HashSet<String>,
     pub suffix: HashSet<String>,
-    pub query: Query
+    pub query: Query,
 }
 
 impl RegexInfo {
     pub fn new(expr: &Expr) -> Self {
         match expr {
-            &Expr::Empty
-            | &Expr::StartLine | &Expr::EndLine
-            | &Expr::StartText | &Expr::EndText
-            | &Expr::WordBoundary | &Expr::NotWordBoundary => {
-                Self::empty_string()
-            },
+            &Expr::Empty |
+            &Expr::StartLine |
+            &Expr::EndLine |
+            &Expr::StartText |
+            &Expr::EndText |
+            &Expr::WordBoundary |
+            &Expr::NotWordBoundary => Self::empty_string(),
             &Expr::Literal {ref chars, casei: true} => {
                 match chars.len() {
                     0 => Self::empty_string(),
-                    1 => { 
+                    1 => {
                         let re1 = Expr::Class(CharClass::new(vec![ClassRange {
-                            start: chars[0],
-                            end: chars[0]
-                        }]));
+                                                                      start: chars[0],
+                                                                      end: chars[0],
+                                                                  }]));
                         RegexInfo::new(&re1)
-                    },
+                    }
                     _ => {
                         // Multi-letter case-folded string:
                         // treat as concatenation of single-letter case-folded strings.
@@ -138,12 +140,12 @@ impl RegexInfo {
                             concat(info,
                                    Self::new(&Expr::Literal {
                                        chars: vec![*c],
-                                       casei: true
+                                       casei: true,
                                    }))
                         })
                     }
                 }
-            },
+            }
             &Expr::Literal {ref chars, casei: false} => {
                 let exact_set = {
                     let mut h = HashSet::<String>::new();
@@ -155,29 +157,25 @@ impl RegexInfo {
                     exact_set: Some(exact_set.clone()),
                     prefix: HashSet::new(),
                     suffix: HashSet::new(),
-                    query: and_trigrams(Query::all(), &exact_set)
+                    query: and_trigrams(Query::all(), &exact_set),
                 }
-            },
-            &Expr::AnyChar | &Expr::AnyCharNoNL => {
-                Self::any_char()
-            },
+            }
+            &Expr::AnyChar | &Expr::AnyCharNoNL => Self::any_char(),
             &Expr::Concat(ref v) => {
                 let analyzed = v.iter().map(RegexInfo::new);
                 analyzed.fold(Self::empty_string(), concat)
-            },
+            }
             &Expr::Alternate(ref v) => {
                 let analyzed = v.iter().map(RegexInfo::new);
                 analyzed.fold(Self::no_match(), alternate)
-            },
+            }
             &Expr::Repeat {ref e, ref r, /* ref greedy */ .. } => {
                 match r {
-                    &Repeater::ZeroOrOne => {
-                        alternate(RegexInfo::new(e), Self::empty_string())
-                    },
+                    &Repeater::ZeroOrOne => alternate(RegexInfo::new(e), Self::empty_string()),
                     &Repeater::ZeroOrMore => {
                         // We don't know anything, so assume the worst.
                         Self::any_match()
-                    },
+                    }
                     &Repeater::OneOrMore => {
                         // x+
                         // Since there has to be at least one x, the prefixes and suffixes
@@ -190,10 +188,10 @@ impl RegexInfo {
                             info.exact_set = None;
                         }
                         info
-                    },
-                    &Repeater::Range {..} => unimplemented!() /* is this needed? */
+                    }
+                    &Repeater::Range {..} => unimplemented!(), /* is this needed? */
                 }
-            },
+            }
             &Expr::Class(ref charclass) if charclass.is_empty() => Self::no_match(),
             &Expr::Class(ref charclass) => {
                 let ranges = charclass.deref();
@@ -202,7 +200,7 @@ impl RegexInfo {
                     exact_set: None,
                     prefix: HashSet::new(),
                     suffix: HashSet::new(),
-                    query: Query::all()
+                    query: Query::all(),
                 };
                 for each_range in ranges {
                     let &ClassRange { start: low, end: high } = each_range;
@@ -223,8 +221,8 @@ impl RegexInfo {
                     }
                 }
                 info
-            },
-            _ => unimplemented!() /* Still have more cases to implement */
+            }
+            _ => unimplemented!(), /* Still have more cases to implement */
         }
     }
     fn no_match() -> Self {
@@ -233,7 +231,7 @@ impl RegexInfo {
             exact_set: None,
             prefix: HashSet::new(),
             suffix: HashSet::new(),
-            query: Query::new(QueryOperation::None)
+            query: Query::new(QueryOperation::None),
         }
     }
     fn empty_string() -> Self {
@@ -242,7 +240,7 @@ impl RegexInfo {
             exact_set: Some(Self::hashset_with_only_emptystring()),
             prefix: HashSet::new(),
             suffix: HashSet::new(),
-            query: Query::all()
+            query: Query::all(),
         }
     }
     fn any_char() -> Self {
@@ -251,7 +249,7 @@ impl RegexInfo {
             exact_set: None,
             prefix: Self::hashset_with_only_emptystring(),
             suffix: Self::hashset_with_only_emptystring(),
-            query: Query::all()
+            query: Query::all(),
         }
     }
     fn any_match() -> Self {
@@ -260,7 +258,7 @@ impl RegexInfo {
             exact_set: None,
             prefix: Self::hashset_with_only_emptystring(),
             suffix: Self::hashset_with_only_emptystring(),
-            query: Query::new(QueryOperation::All)
+            query: Query::new(QueryOperation::All),
         }
     }
     fn hashset_with_only_emptystring() -> HashSet<String> {
@@ -278,10 +276,9 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     // of them must be present and would not necessarily be
     // accounted for in xy.prefix or xy.suffix yet.  Cut things off
     // at maxSet just to keep the sets manageable.
-    xy.query = if x.exact_set.is_none() && y.exact_set.is_none()
-        && x.suffix.len() <= 20 && y.prefix.len() <= 20
-        && (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3
-    {
+    xy.query = if x.exact_set.is_none() && y.exact_set.is_none() && x.suffix.len() <= 20 &&
+                  y.prefix.len() <= 20 &&
+                  (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3 {
         and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
     } else {
         x.query.and(y.query)
@@ -321,17 +318,17 @@ fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     match (&x.exact_set, &y.exact_set) {
         (&Some(ref x_s), &Some(ref y_s)) => {
             xy.exact_set = Some(union(&x_s, y_s));
-        },
+        }
         (&Some(ref x_s), &None) => {
             xy.prefix = union(&x_s, &y.prefix);
             xy.suffix = union(&x_s, &y.suffix);
             x.query = and_trigrams(x.query, x_s);
-        },
+        }
         (&None, &Some(ref y_s)) => {
             xy.prefix = union(&x.prefix, &y_s);
             xy.suffix = union(&x.suffix, &y_s);
             y.query = and_trigrams(y.query, y_s);
-        },
+        }
         _ => {
             xy.prefix = union(&x.prefix, &y.prefix);
             xy.suffix = union(&x.suffix, &y.suffix);
@@ -370,7 +367,7 @@ fn trigrams_imply(trigram: &HashSet<Trigram>, rhs: &Query) -> bool {
                 return true;
             }
             return false;
-        },
+        }
         QueryOperation::And => {
             if !rhs.sub.iter().any(|s| trigrams_imply(trigram, s)) {
                 return false;
@@ -379,8 +376,8 @@ fn trigrams_imply(trigram: &HashSet<Trigram>, rhs: &Query) -> bool {
                 return false;
             }
             return true;
-        },
-        _ => false
+        }
+        _ => false,
     }
 }
 
@@ -395,13 +392,13 @@ fn and_trigrams(q: Query, t: &HashSet<Trigram>) -> Query {
         let mut trigram = HashSet::<Trigram>::new();
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
-        for i in 0 .. (t_string.len() - 2) {
-            trigram.insert(t_string[i .. i + 3].to_string());
+        for i in 0..(t_string.len() - 2) {
+            trigram.insert(t_string[i..i + 3].to_string());
         }
         or.or(Query {
             operation: QueryOperation::And,
             trigram: trigram,
-            sub: Vec::new()
+            sub: Vec::new(),
         })
     });
     q.and(or)
@@ -479,12 +476,12 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
         let new_operation = match operation {
             QueryOperation::And => QueryOperation::Or,
             QueryOperation::Or => QueryOperation::And,
-            _ => panic!("unexpected query operation: {:?}", operation)
+            _ => panic!("unexpected query operation: {:?}", operation),
         };
         let t = Query {
             operation: new_operation,
             trigram: common,
-            sub: Vec::new()
+            sub: Vec::new(),
         };
         and_or(t, s, new_operation)
     } else {
@@ -492,7 +489,7 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
         Query {
             operation: operation,
             trigram: HashSet::new(),
-            sub: vec![q, r]
+            sub: vec![q, r],
         }
     }
 }
@@ -502,7 +499,7 @@ struct CharRangeIter {
     #[allow(dead_code)]
     low: char, // here to make debugging easier
     high: char,
-    position: char
+    position: char,
 }
 
 impl CharRangeIter {
@@ -515,7 +512,7 @@ impl CharRangeIter {
             Some(CharRangeIter {
                 low: low,
                 high: high,
-                position: low
+                position: low,
             })
         }
     }

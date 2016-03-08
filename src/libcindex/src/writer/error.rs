@@ -11,7 +11,7 @@ use byteorder;
 #[derive(Debug)]
 pub struct IndexError {
     kind: IndexErrorKind,
-    error: Box<error::Error + Send + Sync>
+    error: Box<error::Error + Send + Sync>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub enum IndexErrorKind {
     /// Binary data is present in file (binary files are skipped)
     BinaryDataPresent,
     /// The ratio of invalid utf-8 : valid utf-8 chars is too high
-    HighInvalidUtf8Ratio
+    HighInvalidUtf8Ratio,
 }
 
 
@@ -57,7 +57,7 @@ impl IndexError {
     {
         IndexError {
             kind: kind,
-            error: error.into()
+            error: error.into(),
         }
     }
     /// Returns the type of the error
@@ -70,7 +70,7 @@ impl From<io::Error> for IndexError {
     fn from(e: io::Error) -> Self {
         IndexError {
             kind: IndexErrorKind::IoError(e.kind()),
-            error: Box::new(e)
+            error: Box::new(e),
         }
     }
 }
@@ -79,9 +79,11 @@ impl From<byteorder::Error> for IndexError {
     fn from(e: byteorder::Error) -> Self {
         match e {
             byteorder::Error::Io(err) => IndexError::from(err),
-            err @ _ => IndexError {
-                kind: IndexErrorKind::ByteorderError,
-                error: Box::new(err)
+            err @ _ => {
+                IndexError {
+                    kind: IndexErrorKind::ByteorderError,
+                    error: Box::new(err),
+                }
             }
         }
     }
@@ -90,10 +92,8 @@ impl From<byteorder::Error> for IndexError {
 impl From<IndexError> for io::Error {
     fn from(e: IndexError) -> Self {
         match e.kind() {
-            IndexErrorKind::IoError(ekind) => {
-                io::Error::new(ekind, e)
-            },
-            _ => io::Error::new(io::ErrorKind::Other, e)
+            IndexErrorKind::IoError(ekind) => io::Error::new(ekind, e),
+            _ => io::Error::new(io::ErrorKind::Other, e),
         }
     }
 }
@@ -108,7 +108,7 @@ impl Error for IndexError {
             IndexErrorKind::LineTooLong => "line too long",
             IndexErrorKind::TooManyTrigrams => "too many trigrams in file",
             IndexErrorKind::BinaryDataPresent => "binary file",
-            IndexErrorKind::HighInvalidUtf8Ratio => "Too many invalid utf-8 sequences"
+            IndexErrorKind::HighInvalidUtf8Ratio => "Too many invalid utf-8 sequences",
         }
     }
 }
@@ -121,8 +121,7 @@ impl fmt::Display for IndexError {
 
 
 /// A specialized result type for Index operations.
-/// 
+///
 /// Behaves similarly to std::io::Result
 ///
 pub type IndexResult<T> = Result<T, IndexError>;
-

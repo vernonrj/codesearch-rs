@@ -27,7 +27,7 @@ use std::env;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrintFormat {
     Normal,
-    VisualStudio
+    VisualStudio,
 }
 
 #[derive(Debug)]
@@ -38,16 +38,10 @@ pub struct MatchOptions {
     pub ignore_case: bool,
     pub files_with_matches_only: bool,
     pub line_number: bool,
-    pub max_count: Option<usize>
+    pub max_count: Option<usize>,
 }
 
-fn main() {
-    libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
-
-    let matches = clap::App::new("csearch")
-        .version(&crate_version!()[..])
-        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go authors)")
-        .about("
+const ABOUT: &'static str = "
 Csearch behaves like grep over all indexed files, searching for regexp,
 an RE2 (nearly PCRE) regular expression.
 
@@ -62,42 +56,60 @@ overwrites it.  Run cindex --help for more.
 
 Csearch uses the index stored in $CSEARCHINDEX or, if that variable is unset or
 empty, $HOME/.csearchindex.
-")
-        .arg(clap::Arg::with_name("PATTERN")
-             .help("a regular expression to search with")
-             .required(true)
-             .index(1))
-        .arg(clap::Arg::with_name("count")
-             .short("c").long("count")
-             .help("print only a count of matching lines per file"))
-        .arg(clap::Arg::with_name("FILE_PATTERN")
-             .short("G").long("file-search-regex")
-             .help("limit search to filenames matching FILE_PATTERN")
-             .takes_value(true))
-        .arg(clap::Arg::with_name("ignore-case")
-             .short("i").long("ignore-case")
-             .help("Match case insensitively"))
-        .arg(clap::Arg::with_name("files-with-matches")
-             .short("l").long("files-with-matches")
-             .help("Only print filenames that contain matches (don't print the matching lines)"))
-        .arg(clap::Arg::with_name("line-number")
-             .short("n").long("line-number")
-             .help("print line number with output lines"))
-        .arg(clap::Arg::with_name("visual-studio-format")
-             .long("format-vs")
-             .help("print lines in a format that can be parsed by Visual Studio 2008"))
-        .arg(clap::Arg::with_name("NUM")
-             .short("m").long("max-count")
-             .takes_value(true)
-             .help("stop after NUM matches"))
-        .arg(clap::Arg::with_name("bruteforce")
-             .long("brute")
-             .help("brute force - search all files in the index"))
-        .arg(clap::Arg::with_name("INDEX_FILE")
-             .long("indexpath")
-             .takes_value(true)
-             .help("use specified INDEX_FILE as the index path. overrides $CSEARCHINDEX."))
-        .get_matches();
+";
+
+fn main() {
+    libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
+
+    let matches = clap::App::new("csearch")
+                      .version(&crate_version!()[..])
+                      .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright \
+                               2011 the Go authors)")
+                      .about(ABOUT)
+                      .arg(clap::Arg::with_name("PATTERN")
+                               .help("a regular expression to search with")
+                               .required(true)
+                               .index(1))
+                      .arg(clap::Arg::with_name("count")
+                               .short("c")
+                               .long("count")
+                               .help("print only a count of matching lines per file"))
+                      .arg(clap::Arg::with_name("FILE_PATTERN")
+                               .short("G")
+                               .long("file-search-regex")
+                               .help("limit search to filenames matching FILE_PATTERN")
+                               .takes_value(true))
+                      .arg(clap::Arg::with_name("ignore-case")
+                               .short("i")
+                               .long("ignore-case")
+                               .help("Match case insensitively"))
+                      .arg(clap::Arg::with_name("files-with-matches")
+                               .short("l")
+                               .long("files-with-matches")
+                               .help("Only print filenames that contain matches (don't print \
+                                      the matching lines)"))
+                      .arg(clap::Arg::with_name("line-number")
+                               .short("n")
+                               .long("line-number")
+                               .help("print line number with output lines"))
+                      .arg(clap::Arg::with_name("visual-studio-format")
+                               .long("format-vs")
+                               .help("print lines in a format that can be parsed by Visual \
+                                      Studio 2008"))
+                      .arg(clap::Arg::with_name("NUM")
+                               .short("m")
+                               .long("max-count")
+                               .takes_value(true)
+                               .help("stop after NUM matches"))
+                      .arg(clap::Arg::with_name("bruteforce")
+                               .long("brute")
+                               .help("brute force - search all files in the index"))
+                      .arg(clap::Arg::with_name("INDEX_FILE")
+                               .long("indexpath")
+                               .takes_value(true)
+                               .help("use specified INDEX_FILE as the index path. overrides \
+                                      $CSEARCHINDEX."))
+                      .get_matches();
 
     // possibly add ignore case flag to the pattern
     let ignore_case = matches.is_present("ignore-case");
@@ -106,13 +118,17 @@ empty, $HOME/.csearchindex.
     let pattern = {
         let user_pattern = matches.value_of("PATTERN").expect("Failed to get PATTERN");
 
-        let ignore_case_flag = if ignore_case { "(?i)" } else { "" };
+        let ignore_case_flag = if ignore_case {
+            "(?i)"
+        } else {
+            ""
+        };
         let multiline_flag = "(?m)";
         String::from(ignore_case_flag) + multiline_flag + user_pattern
     };
     let regex_pattern = match regex::Regex::new(&pattern) {
         Ok(r) => r,
-        Err(e) => panic!("PATTERN: {}", e)
+        Err(e) => panic!("PATTERN: {}", e),
     };
 
     // possibly override the csearchindex
@@ -132,14 +148,14 @@ empty, $HOME/.csearchindex.
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
         line_number: matches.is_present("line-number"),
-        max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap())
+        max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap()),
     };
 
     // Get the index from file
     let index_path = libcsearch::csearch_index();
     let index_reader = match IndexReader::open(index_path) {
         Ok(i) => i,
-        Err(e) => panic!("{}", e)
+        Err(e) => panic!("{}", e),
     };
 
     // Find all possibly matching files using the pseudo-regexp
@@ -157,12 +173,14 @@ empty, $HOME/.csearchindex.
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
         let file_pattern = match regex::Regex::new(&file_pattern_str) {
             Ok(r) => r,
-            Err(e) => panic!("FILE_PATTERN: {}", e)
+            Err(e) => panic!("FILE_PATTERN: {}", e),
         };
-        post = post.into_iter().filter(|file_id| {
-            let name = index_reader.name(*file_id);
-            file_pattern.is_match(&name)
-        }).collect::<Vec<_>>();
+        post = post.into_iter()
+                   .filter(|file_id| {
+                       let name = index_reader.name(*file_id);
+                       file_pattern.is_match(&name)
+                   })
+                   .collect::<Vec<_>>();
     }
 
     // Search all possibly matching files for matches, printing the matching lines
@@ -188,7 +206,7 @@ empty, $HOME/.csearchindex.
             }
             match line_printer.print_line(&name, &each_line) {
                 Ok(_) => (),
-                Err(_) => return    // return early if stdout is closed
+                Err(_) => return,    // return early if stdout is closed
             }
         }
     }
@@ -210,7 +228,7 @@ empty, $HOME/.csearchindex.
 
 struct LinePrinter<'a> {
     options: &'a MatchOptions,
-    num_matches: HashMap<String, usize>
+    num_matches: HashMap<String, usize>,
 }
 
 
@@ -218,7 +236,7 @@ impl<'a> LinePrinter<'a> {
     fn new(options: &'a MatchOptions) -> Self {
         LinePrinter {
             options: options,
-            num_matches: HashMap::new()
+            num_matches: HashMap::new(),
         }
     }
     fn all_lines_printed(&self) -> bool {
@@ -233,8 +251,9 @@ impl<'a> LinePrinter<'a> {
     }
     fn increment_file_match(&mut self, filename: &str) {
         if self.num_matches.contains_key(filename) {
-            let mut n = self.num_matches.get_mut(filename)
-                                        .expect("expected filename key to exist");
+            let mut n = self.num_matches
+                            .get_mut(filename)
+                            .expect("expected filename key to exist");
             *n += 1;
         } else {
             self.num_matches.insert(filename.to_string(), 1);
@@ -270,5 +289,3 @@ impl<'a> LinePrinter<'a> {
         out_line
     }
 }
-
-

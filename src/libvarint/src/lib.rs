@@ -11,7 +11,7 @@ pub fn read_uvarint(b: &[u8]) -> Result<(u64, u64), u64> {
     for (i, b) in b.iter().enumerate() {
         if *b < 0x80 {
             if i > 9 || i == 9 && *b > 1 {
-                return Err((i+1) as u64);
+                return Err((i + 1) as u64);
             } else {
                 return Ok((x | ((*b as u64) << s), ((i + 1) as u64)));
             }
@@ -24,16 +24,15 @@ pub fn read_uvarint(b: &[u8]) -> Result<(u64, u64), u64> {
 
 
 pub fn write_uvarint<W: Write>(writer: &mut W, x: u32) -> io::Result<usize> {
-    if x < (1<<7) {
+    if x < (1 << 7) {
         writer.write(&mut [x as u8])
-    } else if x < (1<<14) {
-        writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                           ((x >> 7) & 0xff) as u8])
-    } else if x < (1<<21) {
+    } else if x < (1 << 14) {
+        writer.write(&mut [((x | 0x80) & 0xff) as u8, ((x >> 7) & 0xff) as u8])
+    } else if x < (1 << 21) {
         writer.write(&mut [((x | 0x80) & 0xff) as u8,
                            ((x >> 7) & 0xff) as u8,
                            ((x >> 14) & 0xff) as u8])
-    } else if x < (1<<28) {
+    } else if x < (1 << 28) {
         writer.write(&mut [((x | 0x80) & 0xff) as u8,
                            ((x >> 7) & 0xff) as u8,
                            ((x >> 14) & 0xff) as u8,

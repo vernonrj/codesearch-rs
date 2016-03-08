@@ -6,7 +6,7 @@ use chrono::Local;
 use log::{Log, LogRecord, LogLevelFilter, LogMetadata, SetLoggerError};
 
 pub struct Logger {
-    max_level: LogLevelFilter
+    max_level: LogLevelFilter,
 }
 
 impl Log for Logger {
@@ -28,4 +28,3 @@ pub fn init(level: LogLevelFilter) -> Result<(), SetLoggerError> {
         Box::new(Logger { max_level: level })
     })
 }
-

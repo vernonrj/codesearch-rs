@@ -18,5 +18,3 @@ impl PostEntry {
         v
     }
 }
-
-

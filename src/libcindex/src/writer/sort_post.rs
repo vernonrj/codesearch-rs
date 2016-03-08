@@ -23,9 +23,9 @@ pub fn sort_post(post: &mut Vec<PostEntry>) {
     let _frame = libprofiling::profile("sort_post");
     let mut sort_tmp = Vec::<PostEntry>::with_capacity(post.len());
     unsafe { sort_tmp.set_len(post.len()) };
-    let mut sort_n = [0; 1<<K];
+    let mut sort_n = [0; 1 << K];
     for p in post.iter() {
-        let r = p.trigram() & ((1<<K) - 1);
+        let r = p.trigram() & ((1 << K) - 1);
         sort_n[r as usize] += 1;
     }
     let mut tot = 0;
@@ -35,16 +35,16 @@ pub fn sort_post(post: &mut Vec<PostEntry>) {
         tot += val;
     }
     for p in post.iter() {
-        let r = (p.trigram() & ((1<<K) - 1)) as usize;
+        let r = (p.trigram() & ((1 << K) - 1)) as usize;
         let o = sort_n[r];
         sort_n[r] += 1;
         sort_tmp[o] = *p;
     }
     mem::swap(post, &mut sort_tmp);
 
-    sort_n = [0; 1<<K];
+    sort_n = [0; 1 << K];
     for p in post.iter() {
-        let r = ((p.value() >> (32+K)) & ((1<<K) - 1)) as usize;
+        let r = ((p.value() >> (32 + K)) & ((1 << K) - 1)) as usize;
         sort_n[r] += 1;
     }
     tot = 0;
@@ -54,7 +54,7 @@ pub fn sort_post(post: &mut Vec<PostEntry>) {
         tot += val;
     }
     for p in post.iter() {
-        let r = ((p.value() >> (32+K)) & ((1<<K) - 1)) as usize;
+        let r = ((p.value() >> (32 + K)) & ((1 << K) - 1)) as usize;
         let o = sort_n[r];
         sort_n[r] += 1;
         sort_tmp[o] = *p;
@@ -64,8 +64,12 @@ pub fn sort_post(post: &mut Vec<PostEntry>) {
 
 #[test]
 fn test_sort() {
-    let mut v = vec![PostEntry::new(5, 0), PostEntry::new(1, 0), PostEntry::new(10, 0),
-                     PostEntry::new(4, 1), PostEntry::new(4, 5), PostEntry::new(5, 10)];
+    let mut v = vec![PostEntry::new(5, 0),
+                     PostEntry::new(1, 0),
+                     PostEntry::new(10, 0),
+                     PostEntry::new(4, 1),
+                     PostEntry::new(4, 5),
+                     PostEntry::new(5, 10)];
     let mut v_1 = v.clone();
     v_1.sort();
     sort_post(&mut v);
