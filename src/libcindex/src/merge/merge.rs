@@ -117,7 +117,7 @@ pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
     let mut mi2 = 0;
     let mut last = "\0".to_string(); // not a prefix of anything
 
-    while mi1 < paths1.len() && mi2 < paths2.len() {
+    while mi1 < paths1.len() || mi2 < paths2.len() {
         let _frame = libprofiling::profile("merge: merge file_ids");
         let p = if mi2 >= paths2.len() || mi1 < paths1.len() && paths1[mi1] <= paths2[mi2] {
             let p = paths1[mi1].clone();
