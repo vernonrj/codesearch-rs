@@ -127,6 +127,7 @@ delete the existing index before indexing the new paths.
 With no path arguments, cindex -reset removes the index.")
     .arg(clap::Arg::with_name("path")
          .index(1)
+         .multiple(true)
          .help("path to index"))
     .arg(clap::Arg::with_name("list-paths")
          .long("list")
@@ -184,8 +185,8 @@ With no path arguments, cindex -reset removes the index.")
     let mut excludes: Vec<glob::Pattern> = vec![glob::Pattern::new(".csearchindex").unwrap()];
     let mut args = Vec::<String>::new();
 
-    if let Some(p) = matches.value_of("path") {
-        args.push(p.to_string());
+    if let Some(p) = matches.values_of("path") {
+        args.extend(p.map(String::from));
     }
     
     matches.value_of("INDEX_FILE").map(|p| {
