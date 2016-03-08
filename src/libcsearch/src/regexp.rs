@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 use std::char;
 use std::collections::HashSet;
-use std::ops::{Deref, Range};
+use std::ops::Deref;
 use std::hash::Hash;
 
 // use regex::Regex;

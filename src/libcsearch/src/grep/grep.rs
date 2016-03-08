@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 use regex::Regex;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader};
 use std::fs::File;
 use std::path::Path;
 
@@ -74,7 +74,8 @@ impl Grep {
         File::open(path).map(|f| {
             GrepIter {
                 expression: self.expression.clone(),
-                open_file: Box::new(BufReader::new(f).lines().enumerate())
+                open_file: BufReader::new(f),
+                line_number: 0
             }
         })
     }
@@ -87,11 +88,12 @@ impl Grep {
  */
 pub struct GrepIter {
     expression: Regex,
-    open_file: Box<Iterator<Item=(usize, io::Result<String>)>>
+    open_file: BufReader<File>,
+    line_number: usize
 }
 
 impl GrepIter {
-    fn filter_line(&self, l: &String) -> bool {
+    fn filter_line(&self, l: &str) -> bool {
         self.expression.is_match(&l)
     }
 }
@@ -113,21 +115,24 @@ pub struct MatchResult {
 impl Iterator for GrepIter {
     type Item = MatchResult;
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((line_number, next_line_result)) = self.open_file.next() {
-            match next_line_result {
-                Ok(ref l) if self.filter_line(&l) => {
-                    return Some(MatchResult {
-                        line: l.clone(),
-                        line_number: line_number
-                    });
-                },
-                Ok(_) => (), // no match
-                Err(cause) => {
-                    writeln!(&mut io::stderr(), "failed to read line: {}", cause).unwrap();
-                    // don't read any more of the file
-                    return None;
-                },
+        let mut raw_line = Vec::new();
+        while let Ok(n) = self.open_file.read_until(0x0a, &mut raw_line) {
+            if n == 0 {
+                break;
             }
+            // remove newline
+            raw_line.pop();
+            {
+                let line = String::from_utf8_lossy(&raw_line);
+                if self.filter_line(&line) {
+                    return Some(MatchResult {
+                        line: line.into_owned(),
+                        line_number: self.line_number
+                    });
+                }
+            }
+            self.line_number += 1;
+            raw_line.clear();
         }
         // done with file
         None
