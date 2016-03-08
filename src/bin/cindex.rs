@@ -211,6 +211,7 @@ With no path arguments, cindex -reset removes the index.")
         if is_regular_file(meta) {
             std::fs::remove_file(p).expect("failed to remove file");
         }
+        return;
     }
     if let Some(exc_path_str) = matches.value_of("EXCLUDE_FILE") {
         let exclude_path = Path::new(exc_path_str);
