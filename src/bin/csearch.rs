@@ -23,6 +23,7 @@ use libcsearch::regexp::{RegexInfo, Query};
 use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrintFormat {
@@ -215,13 +216,13 @@ fn main() {
         let mut kv: Vec<_> = line_printer.num_matches.iter().collect();
         kv.sort();
         for (k, v) in kv {
-            println!("{}: {}", k, v);
+            println!("{}: {}", k.display(), v);
         }
     } else if match_options.files_with_matches_only {
         let mut v: Vec<_> = line_printer.num_matches.keys().collect();
         v.sort();
         for k in v {
-            println!("{}", k);
+            println!("{}", k.display());
         }
     }
 
@@ -229,7 +230,7 @@ fn main() {
 
 struct LinePrinter<'a> {
     options: &'a MatchOptions,
-    num_matches: HashMap<String, usize>,
+    num_matches: HashMap<PathBuf, usize>,
 }
 
 
@@ -250,18 +251,18 @@ impl<'a> LinePrinter<'a> {
     fn only_filenames_printed(&self) -> bool {
         self.options.files_with_matches_only
     }
-    fn increment_file_match(&mut self, filename: &str) {
-        if self.num_matches.contains_key(filename) {
+    fn increment_file_match<P: AsRef<Path>>(&mut self, filename: P) {
+        if self.num_matches.contains_key(filename.as_ref()) {
             let mut n = self.num_matches
-                            .get_mut(filename)
+                            .get_mut(filename.as_ref())
                             .expect("expected filename key to exist");
             *n += 1;
         } else {
-            self.num_matches.insert(filename.to_string(), 1);
+            self.num_matches.insert(PathBuf::from(filename.as_ref()), 1);
         }
     }
-    fn print_line(&mut self, filename: &str, result: &grep::grep::MatchResult) -> io::Result<()> {
-        self.increment_file_match(filename);
+    fn print_line<P: AsRef<Path>>(&mut self, filename: P, result: &grep::MatchResult) -> io::Result<()> {
+        self.increment_file_match(filename.as_ref());
         if self.all_lines_printed() {
             let out_line = self.format_line(filename, result);
             writeln!(&mut std::io::stdout(), "{}", out_line)
@@ -271,9 +272,9 @@ impl<'a> LinePrinter<'a> {
             return Ok(());
         }
     }
-    fn format_line(&self, filename: &str, result: &grep::grep::MatchResult) -> String {
+    fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
-        out_line.push_str(filename);
+        out_line.push_str(&format!("{}", filename.as_ref().display()));
         if self.options.print_format == PrintFormat::VisualStudio {
             out_line.push_str("(");
         } else {
