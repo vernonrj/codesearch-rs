@@ -193,7 +193,7 @@ fn main() {
         let g_it = match g.open(name.clone()) {
             Ok(g_it) => g_it,
             Err(cause) => {
-                warn!("File open failure: {}", cause);
+                warn!("{} - File open failure: {}", name, cause);
                 continue;
             }
         };

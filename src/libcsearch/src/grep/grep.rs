@@ -120,16 +120,16 @@ impl Iterator for GrepIter {
             }
             // remove newline
             raw_line.pop();
+            self.line_number += 1;
             {
                 let line = String::from_utf8_lossy(&raw_line);
                 if self.filter_line(&line) {
                     return Some(MatchResult {
                         line: line.into_owned(),
-                        line_number: self.line_number,
+                        line_number: self.line_number - 1,
                     });
                 }
             }
-            self.line_number += 1;
             raw_line.clear();
         }
         // done with file
