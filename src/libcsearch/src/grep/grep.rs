@@ -68,7 +68,7 @@ impl Grep {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn open<P: AsRef<Path> + ToString>(&self, path: P) -> io::Result<GrepIter> {
+    pub fn open<P: AsRef<Path>>(&self, path: P) -> io::Result<GrepIter> {
         File::open(path).map(|f| {
             GrepIter {
                 expression: self.expression.clone(),
@@ -88,12 +88,6 @@ pub struct GrepIter {
     expression: Regex,
     open_file: BufReader<File>,
     line_number: usize,
-}
-
-impl GrepIter {
-    fn filter_line(&self, l: &str) -> bool {
-        self.expression.is_match(&l)
-    }
 }
 
 /**
@@ -123,7 +117,7 @@ impl Iterator for GrepIter {
             self.line_number += 1;
             {
                 let line = String::from_utf8_lossy(&raw_line);
-                if self.filter_line(&line) {
+                if self.expression.is_match(&line) {
                     return Some(MatchResult {
                         line: line.into_owned(),
                         line_number: self.line_number - 1,

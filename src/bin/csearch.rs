@@ -185,7 +185,7 @@ fn main() {
     }
 
     // Search all possibly matching files for matches, printing the matching lines
-    let g = grep::grep::Grep::new(match_options.pattern.clone());
+    let g = grep::Grep::new(match_options.pattern.clone());
     let max_count = match_options.max_count.clone();
     let mut line_printer = LinePrinter::new(&match_options);
     let mut total_matches = 0;
