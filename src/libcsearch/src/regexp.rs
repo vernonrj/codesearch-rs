@@ -160,9 +160,10 @@ impl RegexInfo {
                 }
             }
             Expr::AnyChar | Expr::AnyCharNoNL => Self::any_char(),
-            Expr::Concat(v) => {
-                let analyzed = v.into_iter().map(RegexInfo::new);
-                analyzed.fold(Self::empty_string(), concat)
+            Expr::Concat(exprs) => {
+                exprs.into_iter()
+                     .map(RegexInfo::new)
+                     .fold(Self::empty_string(), concat)
             }
             Expr::Alternate(v) => {
                 let analyzed = v.into_iter().map(RegexInfo::new);
@@ -171,10 +172,10 @@ impl RegexInfo {
             Expr::Repeat {e, r, /* ref greedy */ .. } => {
                 match r {
                     Repeater::ZeroOrOne => alternate(RegexInfo::new(*e), Self::empty_string()),
-                    Repeater::ZeroOrMore => {
+                    Repeater::ZeroOrMore | Repeater::Range {..} => {
                         // We don't know anything, so assume the worst.
                         Self::any_match()
-                    }
+                    },
                     Repeater::OneOrMore => {
                         // x+
                         // Since there has to be at least one x, the prefixes and suffixes
@@ -187,13 +188,11 @@ impl RegexInfo {
                             info.exact_set = None;
                         }
                         info
-                    }
-                    Repeater::Range {..} => unimplemented!(), /* is this needed? */
+                    },
                 }
             }
-            Expr::Class(ref charclass) if charclass.is_empty() => Self::no_match(),
-            Expr::Class(ref charclass) => {
-                let ranges = charclass;
+            Expr::Class(ref ranges) if ranges.is_empty() => Self::no_match(),
+            Expr::Class(ref ranges) => {
                 let mut info = RegexInfo {
                     can_empty: false,
                     exact_set: None,
@@ -201,11 +200,11 @@ impl RegexInfo {
                     suffix: HashSet::new(),
                     query: Query::all(),
                 };
-                for each_range in ranges.iter() {
-                    let &ClassRange { start: low, end: high } = each_range;
+                for each_range in ranges {
+                    let &ClassRange { start, end } = each_range;
                     let next_range: HashSet<String> = {
                         let mut h = HashSet::new();
-                        let it = CharRangeIter::new(low, high).expect("expected valid range");
+                        let it = CharRangeIter::new(start, end).expect("expected valid range");
                         for chr in it {
                             let mut s = String::new();
                             s.push(chr);

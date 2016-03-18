@@ -69,6 +69,7 @@ fn main() {
                       .arg(clap::Arg::with_name("PATTERN")
                                .help("a regular expression to search with")
                                .required(true)
+                               .use_delimiter(false)
                                .index(1))
                       .arg(clap::Arg::with_name("count")
                                .short("c")
