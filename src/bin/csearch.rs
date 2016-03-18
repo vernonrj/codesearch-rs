@@ -150,7 +150,12 @@ fn main() {
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
         line_number: matches.is_present("line-number"),
-        max_count: matches.value_of("NUM").map(|s| usize::from_str_radix(s, 10).unwrap()),
+        max_count: matches.value_of("NUM").map(|s| {
+            match usize::from_str_radix(s, 10) {
+                Ok(n) => n,
+                Err(parse_err) => panic!("NUM: {}", parse_err),
+            }
+        }),
     };
 
     // Get the index from file
@@ -261,7 +266,10 @@ impl<'a> LinePrinter<'a> {
             self.num_matches.insert(PathBuf::from(filename.as_ref()), 1);
         }
     }
-    fn print_line<P: AsRef<Path>>(&mut self, filename: P, result: &grep::MatchResult) -> io::Result<()> {
+    fn print_line<P: AsRef<Path>>(&mut self,
+                                  filename: P,
+                                  result: &grep::MatchResult)
+                                  -> io::Result<()> {
         self.increment_file_match(filename.as_ref());
         if self.all_lines_printed() {
             let out_line = self.format_line(filename, result);
