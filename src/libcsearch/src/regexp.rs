@@ -221,8 +221,10 @@ impl RegexInfo {
                     }
                 }
                 info
-            }
-            _ => unimplemented!(), /* Still have more cases to implement */
+            },
+            &Expr::Group { ref e, .. } => {
+                RegexInfo::new(&e)
+            },
         }
     }
     fn no_match() -> Self {
