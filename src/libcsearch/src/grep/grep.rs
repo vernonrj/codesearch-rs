@@ -104,11 +104,13 @@ pub struct MatchResult {
     pub line_number: usize,
 }
 
+const NEWLINE_BYTE: u8 = 0x0a;
+
 impl Iterator for GrepIter {
     type Item = MatchResult;
     fn next(&mut self) -> Option<Self::Item> {
         let mut raw_line = Vec::new();
-        while let Ok(n) = self.open_file.read_until(0x0a, &mut raw_line) {
+        while let Ok(n) = self.open_file.read_until(NEWLINE_BYTE, &mut raw_line) {
             if n == 0 {
                 break;
             }

@@ -309,6 +309,11 @@ fn main() {
     });
 
     for each_path in paths {
+        if !each_path.exists() || !each_path.is_dir() {
+            warn!("{} - directory doesn't exist. Skipping...",
+                  each_path.display());
+            continue;
+        }
         info!("index {}", each_path.display());
         let tx = tx.clone();
         let files = WalkDir::new(each_path)
