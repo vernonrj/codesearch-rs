@@ -164,7 +164,7 @@ fn main() {
     } else {
         // Get the pseudo-regexp (built using trigrams)
         let expr = regex_syntax::Expr::parse(&pattern).unwrap();
-        let q = RegexInfo::new(&expr).query;
+        let q = RegexInfo::new(expr).query;
 
         index_reader.query(q, None)
     };

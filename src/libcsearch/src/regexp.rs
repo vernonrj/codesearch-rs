@@ -4,7 +4,6 @@
 // license that can be found in the LICENSE file.
 use std::char;
 use std::collections::HashSet;
-use std::ops::Deref;
 use std::hash::Hash;
 
 // use regex::Regex;
@@ -114,16 +113,16 @@ pub struct RegexInfo {
 }
 
 impl RegexInfo {
-    pub fn new(expr: &Expr) -> Self {
+    pub fn new(expr: Expr) -> Self {
         match expr {
-            &Expr::Empty |
-            &Expr::StartLine |
-            &Expr::EndLine |
-            &Expr::StartText |
-            &Expr::EndText |
-            &Expr::WordBoundary |
-            &Expr::NotWordBoundary => Self::empty_string(),
-            &Expr::Literal {ref chars, casei: true} => {
+            Expr::Empty |
+            Expr::StartLine |
+            Expr::EndLine |
+            Expr::StartText |
+            Expr::EndText |
+            Expr::WordBoundary |
+            Expr::NotWordBoundary => Self::empty_string(),
+            Expr::Literal {chars, casei: true} => {
                 match chars.len() {
                     0 => Self::empty_string(),
                     1 => {
@@ -131,14 +130,14 @@ impl RegexInfo {
                                                                       start: chars[0],
                                                                       end: chars[0],
                                                                   }]));
-                        RegexInfo::new(&re1)
+                        RegexInfo::new(re1)
                     }
                     _ => {
                         // Multi-letter case-folded string:
                         // treat as concatenation of single-letter case-folded strings.
                         chars.iter().fold(Self::empty_string(), |info, c| {
                             concat(info,
-                                   Self::new(&Expr::Literal {
+                                   Self::new(Expr::Literal {
                                        chars: vec![*c],
                                        casei: true,
                                    }))
@@ -146,10 +145,10 @@ impl RegexInfo {
                     }
                 }
             }
-            &Expr::Literal {ref chars, casei: false} => {
+            Expr::Literal {chars, casei: false} => {
                 let exact_set = {
                     let mut h = HashSet::<String>::new();
-                    h.insert(chars.iter().cloned().collect());
+                    h.insert(chars.into_iter().collect());
                     h
                 };
                 RegexInfo {
@@ -160,28 +159,28 @@ impl RegexInfo {
                     query: and_trigrams(Query::all(), &exact_set),
                 }
             }
-            &Expr::AnyChar | &Expr::AnyCharNoNL => Self::any_char(),
-            &Expr::Concat(ref v) => {
-                let analyzed = v.iter().map(RegexInfo::new);
+            Expr::AnyChar | Expr::AnyCharNoNL => Self::any_char(),
+            Expr::Concat(v) => {
+                let analyzed = v.into_iter().map(RegexInfo::new);
                 analyzed.fold(Self::empty_string(), concat)
             }
-            &Expr::Alternate(ref v) => {
-                let analyzed = v.iter().map(RegexInfo::new);
+            Expr::Alternate(v) => {
+                let analyzed = v.into_iter().map(RegexInfo::new);
                 analyzed.fold(Self::no_match(), alternate)
             }
-            &Expr::Repeat {ref e, ref r, /* ref greedy */ .. } => {
+            Expr::Repeat {e, r, /* ref greedy */ .. } => {
                 match r {
-                    &Repeater::ZeroOrOne => alternate(RegexInfo::new(e), Self::empty_string()),
-                    &Repeater::ZeroOrMore => {
+                    Repeater::ZeroOrOne => alternate(RegexInfo::new(*e), Self::empty_string()),
+                    Repeater::ZeroOrMore => {
                         // We don't know anything, so assume the worst.
                         Self::any_match()
                     }
-                    &Repeater::OneOrMore => {
+                    Repeater::OneOrMore => {
                         // x+
                         // Since there has to be at least one x, the prefixes and suffixes
                         // stay the same.  If x was exact, it isn't anymore.
 
-                        let mut info = RegexInfo::new(e);
+                        let mut info = RegexInfo::new(*e);
                         if let Some(i_s) = info.exact_set {
                             info.prefix = i_s.clone();
                             info.suffix = i_s;
@@ -189,12 +188,12 @@ impl RegexInfo {
                         }
                         info
                     }
-                    &Repeater::Range {..} => unimplemented!(), /* is this needed? */
+                    Repeater::Range {..} => unimplemented!(), /* is this needed? */
                 }
             }
-            &Expr::Class(ref charclass) if charclass.is_empty() => Self::no_match(),
-            &Expr::Class(ref charclass) => {
-                let ranges = charclass.deref();
+            Expr::Class(ref charclass) if charclass.is_empty() => Self::no_match(),
+            Expr::Class(ref charclass) => {
+                let ranges = charclass;
                 let mut info = RegexInfo {
                     can_empty: false,
                     exact_set: None,
@@ -202,7 +201,7 @@ impl RegexInfo {
                     suffix: HashSet::new(),
                     query: Query::all(),
                 };
-                for each_range in ranges {
+                for each_range in ranges.iter() {
                     let &ClassRange { start: low, end: high } = each_range;
                     let next_range: HashSet<String> = {
                         let mut h = HashSet::new();
@@ -222,8 +221,8 @@ impl RegexInfo {
                 }
                 info
             },
-            &Expr::Group { ref e, .. } => {
-                RegexInfo::new(&e)
+            Expr::Group { e, .. } => {
+                RegexInfo::new(*e)
             },
         }
     }
