@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
-hprof = "0.1.3"
+hprof = { version = "0.1", optional = true }

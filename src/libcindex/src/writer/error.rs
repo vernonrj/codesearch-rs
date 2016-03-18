@@ -2,11 +2,10 @@ use std::error::{self, Error};
 use std::fmt;
 use std::io;
 
-use byteorder;
 
 /// The Error type for indexing operations.
 ///
-/// Errors can come from std::io::Error, byteorder::Error, or
+/// Errors can come from std::io::Error, or
 /// from indexing a file.
 #[derive(Debug)]
 pub struct IndexError {
@@ -18,8 +17,6 @@ pub struct IndexError {
 pub enum IndexErrorKind {
     /// A read error returned from a std::io function
     IoError(io::ErrorKind),
-    /// An error returned by a byteorder method
-    ByteorderError,
     /// Indicates a filename isn't valid utf-8
     FileNameError,
     /// The file is longer than the specified max size
@@ -75,19 +72,6 @@ impl From<io::Error> for IndexError {
     }
 }
 
-impl From<byteorder::Error> for IndexError {
-    fn from(e: byteorder::Error) -> Self {
-        match e {
-            byteorder::Error::Io(err) => IndexError::from(err),
-            err @ _ => {
-                IndexError {
-                    kind: IndexErrorKind::ByteorderError,
-                    error: Box::new(err),
-                }
-            }
-        }
-    }
-}
 
 impl From<IndexError> for io::Error {
     fn from(e: IndexError) -> Self {
@@ -102,7 +86,6 @@ impl Error for IndexError {
     fn description(&self) -> &str {
         match self.kind {
             IndexErrorKind::IoError(_) => self.error.description(),
-            IndexErrorKind::ByteorderError => self.error.description(),
             IndexErrorKind::FileNameError => "filename conversion error",
             IndexErrorKind::FileTooLong => "file too long",
             IndexErrorKind::LineTooLong => "line too long",
