@@ -282,25 +282,19 @@ fn main() {
         i.add_paths(paths_cloned.into_iter().map(PathBuf::into_os_string));
         let _frame = libprofiling::profile("Index files");
         while let Ok(f) = rx.recv() {
-            if !seen.contains(&f) {
-                match i.add_file(&f) {
-                    Ok(_) => (),
-                    Err(ref e) => {
-                        match e.kind() {
-                            IndexErrorKind::IoError(_) => {
-                                warn!("{}: {}", Path::new(&f).display(), e)
-                            }
-                            _ => {
-                                if log_skipped {
-                                    warn!("{:?}: skipped. {}", f, e);
-                                }
-                                ()
-                            }
-                        }
-                    }
-                }
-                seen.insert(f);
+            if seen.contains(&f) {
+                continue;
             }
+            if let Err(ref e) = i.add_file(&f) {
+                match e.kind() {
+                    IndexErrorKind::IoError(_) => {
+                        warn!("{}: {}", Path::new(&f).display(), e)
+                    }
+                    _ if log_skipped => warn!("{:?}: skipped. {}", f, e),
+                    _ => ()
+                }
+            }
+            seen.insert(f);
         }
         info!("flush index");
         i.flush().expect("failed to flush index to disk");
@@ -318,7 +312,7 @@ fn main() {
         let tx = tx.clone();
         let files = WalkDir::new(each_path)
                         .into_iter()
-                        .filter_map(|d| d.ok())
+                        .filter_map(Result::ok)
                         .filter(|d| !d.file_type().is_dir());
 
         for d in files {
