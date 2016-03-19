@@ -10,8 +10,6 @@ extern crate clap;
 extern crate log;
 extern crate regex;
 extern crate regex_syntax;
-extern crate libc;
-extern crate ansi_term;
 
 extern crate consts;
 extern crate libcustomlogger;
@@ -22,34 +20,12 @@ use libcsearch::grep;
 use libcsearch::reader::IndexReader;
 use libcsearch::regexp::{RegexInfo, Query};
 
-use ansi_term::Colour;
-
 use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
-#[cfg(windows)]
-const STDOUT_FILENO: i32 = 1;
-#[cfg(not(windows))]
-const STDOUT_FILENO: i32 = libc::STDOUT_FILENO as i32;
 
-
-fn is_color_output_available() -> bool {
-    let isatty = unsafe { libc::isatty(STDOUT_FILENO) != 0 };
-    if !isatty {
-        return false;
-    }
-    let t = if let Ok(term) = env::var("TERM") {
-        term
-    } else {
-        return false;
-    };
-    if t == "dumb" {
-        return false;
-    }
-    return true;
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrintFormat {
@@ -94,6 +70,59 @@ Csearch uses the index stored in $CSEARCHINDEX or, if that variable is unset or
 empty, $HOME/.csearchindex.
 ";
 
+
+#[cfg(feature = "color")]
+mod color {
+    extern crate libc;
+    extern crate ansi_term;
+    use self::ansi_term::Colour;
+    use super::LinePart;
+
+    use std::env;
+
+    #[cfg(windows)]
+    const STDOUT_FILENO: i32 = 1;
+    #[cfg(not(windows))]
+    const STDOUT_FILENO: i32 = libc::STDOUT_FILENO as i32;
+
+    pub fn is_color_output_available() -> bool {
+        let isatty = unsafe { libc::isatty(STDOUT_FILENO) != 0 };
+        if !isatty {
+            return false;
+        }
+        let t = if let Ok(term) = env::var("TERM") {
+            term
+        } else {
+            return false;
+        };
+        if t == "dumb" {
+            return false;
+        }
+        return true;
+    }
+
+    pub fn add_color(text: &str, component: LinePart) -> String {
+        match component {
+            LinePart::Path => Colour::Purple.paint(text).to_string(),
+            LinePart::LineNumber => Colour::Green.paint(text).to_string(),
+            LinePart::Match => Colour::Green.bold().paint(text).to_string(),
+            LinePart::Separator => Colour::Cyan.paint(text).to_string(),
+        }
+    }
+}
+
+#[cfg(not(feature = "color"))]
+mod color {
+    use super::LinePart;
+    pub fn is_color_output_available() -> bool { false }
+    pub fn add_color(text: &str, _: LinePart) -> String {
+        text.to_string()
+    }
+}
+
+pub use color::{is_color_output_available, add_color};
+
+
 fn main() {
     libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
 
@@ -114,11 +143,13 @@ fn main() {
                       .arg(clap::Arg::with_name("color")
                                .long("color")
                                .help("highlight matching strings")
-                               .overrides_with("nocolor"))
+                               .overrides_with("nocolor")
+                               .hidden(!cfg!(feature = "color")))
                       .arg(clap::Arg::with_name("nocolor")
                                .long("nocolor")
                                .help("don't highlight matching strings")
-                               .overrides_with("color"))
+                               .overrides_with("color")
+                               .hidden(!cfg!(feature = "color")))
                       .arg(clap::Arg::with_name("FILE_PATTERN")
                                .short("G")
                                .long("file-search-regex")
@@ -356,12 +387,7 @@ impl<'a> LinePrinter<'a> {
     }
     fn maybe_add_color(&self, text: &str, component: LinePart) -> String {
         if self.options.with_color {
-            match component {
-                LinePart::Path => Colour::Purple.paint(text).to_string(),
-                LinePart::LineNumber => Colour::Green.paint(text).to_string(),
-                LinePart::Match => Colour::Green.bold().paint(text).to_string(),
-                LinePart::Separator => Colour::Cyan.paint(text).to_string(),
-            }
+            add_color(text, component)
         } else {
             text.to_string()
         }
