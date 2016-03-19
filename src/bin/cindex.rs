@@ -22,7 +22,7 @@ extern crate libvarint;
 use libcsearch::reader::IndexReader;
 use libcindex::writer::{IndexWriter, IndexErrorKind};
 use log::LogLevelFilter;
-use walkdir::WalkDir;
+use walkdir::{WalkDir, WalkDirIterator};
 
 use std::collections::HashSet;
 use std::env;
@@ -313,14 +313,15 @@ fn main() {
         let files = WalkDir::new(each_path)
                         .follow_links(true)
                         .into_iter()
+                        .filter_entry(|d| {
+                            let p = d.path();
+                            !excludes.iter().any(|r| r.matches_path(&p))
+                        })
                         .filter_map(Result::ok)
                         .filter(|d| !d.file_type().is_dir());
 
         for d in files {
-            let p = d.path().to_path_buf();
-            if !excludes.iter().any(|r| r.matches_path(&p)) {
-                tx.send(p.into_os_string()).unwrap();
-            }
+            tx.send(OsString::from(d.path())).unwrap();
         }
     }
     drop(tx);

@@ -24,24 +24,13 @@ pub fn read_uvarint(b: &[u8]) -> Result<(u64, u64), u64> {
 
 
 pub fn write_uvarint<W: Write>(writer: &mut W, x: u32) -> io::Result<usize> {
-    if x < (1 << 7) {
-        writer.write(&mut [x as u8])
-    } else if x < (1 << 14) {
-        writer.write(&mut [((x | 0x80) & 0xff) as u8, ((x >> 7) & 0xff) as u8])
-    } else if x < (1 << 21) {
-        writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                           ((x >> 7) & 0xff) as u8,
-                           ((x >> 14) & 0xff) as u8])
-    } else if x < (1 << 28) {
-        writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                           ((x >> 7) & 0xff) as u8,
-                           ((x >> 14) & 0xff) as u8,
-                           ((x >> 21) & 0xff) as u8])
-    } else {
-        writer.write(&mut [((x | 0x80) & 0xff) as u8,
-                           ((x >> 7) & 0xff) as u8,
-                           ((x >> 14) & 0xff) as u8,
-                           ((x >> 21) & 0xff) as u8,
-                           ((x >> 21) & 0xff) as u8])
+    let mut bytes_written = 0;
+    let mut x = x;
+    while x >= 0x80 {
+        try!(writer.write(&mut [((x & 0xff) as u8) | 0x80]));
+        x >>= 7;
+        bytes_written += 1;
     }
+    try!(writer.write(&mut [(x & 0xff) as u8]));
+    Ok(bytes_written + 1)
 }

@@ -84,6 +84,10 @@ impl<'a> PostMapReader<'a> {
         while self.count > 0 {
             self.count -= 1;
             let (delta, n) = libvarint::read_uvarint(self.d).unwrap();
+            if n <= 0 || delta == 0 {
+                panic!("merge: inconsistent index at trigram {}",
+                       self.trigram);
+            }
             self.d = self.d.split_at(n as usize).1;
             self.old_id = self.old_id.wrapping_add(delta as u32);
             while self.i < self.id_map.len() && self.id_map[self.i].high <= self.old_id {

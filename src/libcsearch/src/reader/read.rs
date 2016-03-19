@@ -379,7 +379,7 @@ fn merge_or(l1: Vec<u32>, l2: Vec<u32>) -> Vec<u32> {
 }
 
 #[derive(Debug)]
-struct PostReader<'a, 'b> {
+pub struct PostReader<'a, 'b> {
     index: &'a IndexReader,
     count: isize,
     offset: u32,
