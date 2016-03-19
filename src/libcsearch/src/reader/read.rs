@@ -95,7 +95,7 @@ pub type FileID = u32;
 /// # fn main() { foo(); }
 /// # fn foo() -> io::Result<()> {
 /// let expr = Expr::parse(r"Pattern").unwrap();
-/// let q = RegexInfo::new(&expr).query;
+/// let q = RegexInfo::new(expr).query;
 ///
 /// let idx = try!(IndexReader::open("foo.txt"));
 ///

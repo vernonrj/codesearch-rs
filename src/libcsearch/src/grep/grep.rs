@@ -17,7 +17,7 @@ use std::path::Path;
  * # extern crate regex;
  * # extern crate libcsearch;
  * # use regex::Regex;
- * # use libcsearch::grep::grep::{Grep, GrepIter};
+ * # use libcsearch::grep::{Grep, GrepIter};
  * # use std::io;
  * # fn main() { foo(); }
  * # fn foo() -> io::Result<()> {
@@ -43,7 +43,7 @@ impl Grep {
     /// ```rust
     /// # extern crate regex;
     /// # extern crate libcsearch;
-    /// # use libcsearch::grep::grep::Grep;
+    /// # use libcsearch::grep::Grep;
     /// use regex::Regex;
     /// # fn main() {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
@@ -60,7 +60,7 @@ impl Grep {
     /// # extern crate libcsearch;
     /// use std::io;
     /// # use regex::Regex;
-    /// # use libcsearch::grep::grep::{Grep, GrepIter};
+    /// # use libcsearch::grep::{Grep, GrepIter};
     /// # fn main() { foo(); }
     /// # fn foo() -> io::Result<()> {
     /// let g = Grep::new(Regex::new(r"Pattern").unwrap());
