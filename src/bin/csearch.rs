@@ -114,7 +114,9 @@ mod color {
 #[cfg(not(feature = "color"))]
 mod color {
     use super::LinePart;
-    pub fn is_color_output_available() -> bool { false }
+    pub fn is_color_output_available() -> bool {
+        false
+    }
     pub fn add_color(text: &str, _: LinePart) -> String {
         text.to_string()
     }
@@ -358,7 +360,10 @@ impl<'a> LinePrinter<'a> {
     }
     fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
-        let path_component = self.maybe_add_color(&format!("{}", filename.as_ref().display()),
+        let simplified_path = PathBuf::from(filename.as_ref()
+                                                    .strip_prefix(&env::current_dir().unwrap())
+                                                    .unwrap_or(filename.as_ref()));
+        let path_component = self.maybe_add_color(&format!("{}", simplified_path.display()),
                                                   LinePart::Path);
         out_line.push_str(&path_component);
         let start_sep = if self.options.print_format == PrintFormat::VisualStudio {
