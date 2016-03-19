@@ -10,6 +10,8 @@ extern crate clap;
 extern crate log;
 extern crate regex;
 extern crate regex_syntax;
+extern crate libc;
+extern crate ansi_term;
 
 extern crate consts;
 extern crate libcustomlogger;
@@ -20,15 +22,47 @@ use libcsearch::grep;
 use libcsearch::reader::IndexReader;
 use libcsearch::regexp::{RegexInfo, Query};
 
+use ansi_term::Colour;
+
 use std::io::{self, Write};
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
+const STDOUT_FILENO: i32 = 1;
+#[cfg(not(windows))]
+const STDOUT_FILENO: i32 = libc::STDOUT_FILENO as i32;
+
+
+fn is_color_output_available() -> bool {
+    let isatty = unsafe { libc::isatty(STDOUT_FILENO) != 0 };
+    if !isatty {
+        return false;
+    }
+    let t = if let Ok(term) = env::var("TERM") {
+        term
+    } else {
+        return false;
+    };
+    if t == "dumb" {
+        return false;
+    }
+    return true;
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrintFormat {
     Normal,
     VisualStudio,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum LinePart {
+    Path,
+    LineNumber,
+    Separator,
+    Match,
 }
 
 #[derive(Debug)]
@@ -39,6 +73,7 @@ pub struct MatchOptions {
     pub ignore_case: bool,
     pub files_with_matches_only: bool,
     pub line_number: bool,
+    pub with_color: bool,
     pub max_count: Option<usize>,
 }
 
@@ -76,6 +111,14 @@ fn main() {
                                .short("c")
                                .long("count")
                                .help("print only a count of matching lines per file"))
+                      .arg(clap::Arg::with_name("color")
+                               .long("color")
+                               .help("highlight matching strings")
+                               .overrides_with("nocolor"))
+                      .arg(clap::Arg::with_name("nocolor")
+                               .long("nocolor")
+                               .help("don't highlight matching strings")
+                               .overrides_with("color"))
                       .arg(clap::Arg::with_name("FILE_PATTERN")
                                .short("G")
                                .long("file-search-regex")
@@ -149,7 +192,9 @@ fn main() {
         print_count: matches.is_present("count"),
         ignore_case: ignore_case,
         files_with_matches_only: matches.is_present("files-with-matches"),
-        line_number: matches.is_present("line-number"),
+        line_number: matches.is_present("line-number") ||
+                     matches.is_present("visual-studio-format"),
+        with_color: !matches.is_present("nocolor") && is_color_output_available(),
         max_count: matches.value_of("NUM").map(|s| {
             match usize::from_str_radix(s, 10) {
                 Ok(n) => n,
@@ -282,20 +327,43 @@ impl<'a> LinePrinter<'a> {
     }
     fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
-        out_line.push_str(&format!("{}", filename.as_ref().display()));
-        if self.options.print_format == PrintFormat::VisualStudio {
-            out_line.push_str("(");
+        let path_component = self.maybe_add_color(&format!("{}", filename.as_ref().display()),
+                                                  LinePart::Path);
+        out_line.push_str(&path_component);
+        let start_sep = if self.options.print_format == PrintFormat::VisualStudio {
+            "("
         } else {
-            out_line.push_str(":");
-        }
+            ":"
+        };
+        out_line.push_str(&self.maybe_add_color(start_sep, LinePart::Separator));
         if self.options.line_number {
-            out_line.push_str(&(result.line_number + 1).to_string()); // 0-based to 1-based
+            let line_number = self.maybe_add_color(&(result.line_number + 1).to_string(),
+                                                   LinePart::LineNumber);
+            out_line.push_str(&line_number);
             if self.options.print_format == PrintFormat::VisualStudio {
-                out_line.push_str(")");
+                out_line.push_str(&self.maybe_add_color(")", LinePart::Separator));
             }
-            out_line.push_str(":");
+            out_line.push_str(&self.maybe_add_color(":", LinePart::Separator));
         }
-        out_line.push_str(&result.line);
+        let line = {
+            let (start, end) = self.options.pattern.find(&result.line).unwrap();
+            String::from(&result.line[0..start]) +
+            &self.maybe_add_color(&result.line[start..end], LinePart::Match) +
+            &result.line[end..]
+        };
+        out_line.push_str(&line);
         out_line
+    }
+    fn maybe_add_color(&self, text: &str, component: LinePart) -> String {
+        if self.options.with_color {
+            match component {
+                LinePart::Path => Colour::Purple.paint(text).to_string(),
+                LinePart::LineNumber => Colour::Green.paint(text).to_string(),
+                LinePart::Match => Colour::Green.bold().paint(text).to_string(),
+                LinePart::Separator => Colour::Cyan.paint(text).to_string(),
+            }
+        } else {
+            text.to_string()
+        }
     }
 }

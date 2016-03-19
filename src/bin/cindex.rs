@@ -287,11 +287,9 @@ fn main() {
             }
             if let Err(ref e) = i.add_file(&f) {
                 match e.kind() {
-                    IndexErrorKind::IoError(_) => {
-                        warn!("{}: {}", Path::new(&f).display(), e)
-                    }
+                    IndexErrorKind::IoError(_) => warn!("{}: {}", Path::new(&f).display(), e),
                     _ if log_skipped => warn!("{:?}: skipped. {}", f, e),
-                    _ => ()
+                    _ => (),
                 }
             }
             seen.insert(f);

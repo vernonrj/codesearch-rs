@@ -9,6 +9,8 @@ homepage = "https://github.com/vernonrj/codesearch-rs"
 repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
+ansi_term = { version = "0.7", optional = false }
+libc = "0.2"
 clap = "2.1"
 glob = "0.2"
 regex = "0.1"
@@ -24,6 +26,8 @@ libprofiling = { path = "src/libprofiling" }
 libvarint = { path = "src/libvarint" }
 
 [features]
+default = ["color"]
 profile = []
+color = []
 
 
