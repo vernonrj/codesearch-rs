@@ -311,6 +311,7 @@ fn main() {
         info!("index {}", each_path.display());
         let tx = tx.clone();
         let files = WalkDir::new(each_path)
+                        .follow_links(true)
                         .into_iter()
                         .filter_map(Result::ok)
                         .filter(|d| !d.file_type().is_dir());
