@@ -3,8 +3,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 use std::char;
-use std::collections::HashSet;
-use std::hash::Hash;
+use std::collections::BTreeSet;
+
+pub type StringSet = BTreeSet<String>;
 
 // use regex::Regex;
 use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
@@ -22,18 +23,62 @@ pub type Trigram = String;
 
 /// A structure, similar to a regular expression, that uses
 /// composed trigrams to find matches in text.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Query {
     pub operation: QueryOperation,
-    pub trigram: HashSet<Trigram>,
+    pub trigram: BTreeSet<Trigram>,
     pub sub: Vec<Query>,
+}
+
+impl Query {
+    pub fn format_as_string(&self) -> String {
+        let mut s = String::new();
+        match self.operation {
+            QueryOperation::None => return String::from("-"),
+            QueryOperation::All => return String::from("+"),
+            _ => ()
+        }
+        if self.sub.is_empty() && self.trigram.len() == 1 {
+            s.push_str(&format!("\"{}\"", self.trigram.iter().next().unwrap()));
+            return s;
+        }
+        let (sjoin, tjoin) = match self.operation {
+            QueryOperation::And => (" ", " "),
+            _ => (")|(", "|")
+        };
+        let end = if self.operation ==  QueryOperation::And {
+            ""
+        } else {
+            s.push_str("(");
+            ")"
+        };
+        let mut trigrams = self.trigram.iter().cloned().collect::<Vec<_>>();
+        trigrams.sort();
+        for (i, t) in trigrams.into_iter().enumerate() {
+            if i > 0 {
+                s.push_str(tjoin);
+            }
+            s.push_str(&format!("\"{}\"", t));
+        }
+        if !self.sub.is_empty() {
+            if !self.trigram.is_empty() {
+                s.push_str(sjoin);
+            }
+            s.push_str(&self.sub[0].format_as_string());
+            for elem in &self.sub[1..] {
+                s.push_str(&format!("{}{}", sjoin, elem.format_as_string()));
+            }
+        }
+        s.push_str(end);
+        s
+    }
 }
 
 impl Default for Query {
     fn default() -> Self {
         Query {
             operation: QueryOperation::All,
-            trigram: HashSet::new(),
+            trigram: BTreeSet::new(),
             sub: Vec::new(),
         }
     }
@@ -43,16 +88,10 @@ impl Query {
     pub fn new(operation: QueryOperation) -> Query {
         Query {
             operation: operation,
-            trigram: HashSet::new(),
+            trigram: BTreeSet::new(),
             sub: Vec::new(),
         }
     }
-    // pub fn from_regex(expr: Regex) -> Query {
-    //     RegexInfo::new(expr)
-    //         .simplify(true)
-    //         .add_exact()
-    //         .query
-    // }
     pub fn all() -> Query {
         Query::new(QueryOperation::All)
     }
@@ -106,9 +145,9 @@ impl Query {
 #[derive(Default, Debug)]
 pub struct RegexInfo {
     pub can_empty: bool,
-    pub exact_set: Option<HashSet<String>>,
-    pub prefix: HashSet<String>,
-    pub suffix: HashSet<String>,
+    pub exact_set: Option<StringSet>,
+    pub prefix: StringSet,
+    pub suffix: StringSet,
     pub query: Query,
 }
 
@@ -146,30 +185,42 @@ impl RegexInfo {
                 }
             }
             Expr::Literal {chars, casei: false} => {
+                println!("literal {:?}", chars);
                 let exact_set = {
-                    let mut h = HashSet::<String>::new();
+                    let mut h = StringSet::new();
                     h.insert(chars.into_iter().collect());
                     h
                 };
-                RegexInfo {
+                let r = RegexInfo {
                     can_empty: false,
                     exact_set: Some(exact_set.clone()),
-                    prefix: HashSet::new(),
-                    suffix: HashSet::new(),
-                    query: and_trigrams(Query::all(), &exact_set),
-                }
+                    prefix: StringSet::new(),
+                    suffix: StringSet::new(),
+                    query: Query::all()
+                };
+                simplify(r, false)
             }
             Expr::AnyChar | Expr::AnyCharNoNL => Self::any_char(),
             Expr::Concat(exprs) => {
-                exprs.into_iter()
-                     .map(RegexInfo::new)
-                     .fold(Self::empty_string(), concat)
+                println!("OpConcat");
+                if exprs.is_empty() {
+                    return Self::empty_string();
+                }
+                let mut exprs_it = exprs.into_iter().map(RegexInfo::new);
+                let first = exprs_it.next().unwrap();
+                exprs_it.fold(first, concat)
             }
             Expr::Alternate(v) => {
-                let analyzed = v.into_iter().map(RegexInfo::new);
-                analyzed.fold(Self::no_match(), alternate)
+                println!("OpAlternate");
+                if v.is_empty() {
+                    return Self::no_match();
+                }
+                let mut analyzed = v.into_iter().map(RegexInfo::new);
+                let first = analyzed.next().unwrap();
+                analyzed.fold(first, alternate)
             }
             Expr::Repeat {e, r, /* ref greedy */ .. } => {
+                println!("OpRepeat");
                 match r {
                     Repeater::ZeroOrOne => alternate(RegexInfo::new(*e), Self::empty_string()),
                     Repeater::ZeroOrMore | Repeater::Range {..} => {
@@ -187,7 +238,7 @@ impl RegexInfo {
                             info.suffix = i_s;
                             info.exact_set = None;
                         }
-                        info
+                        simplify(info, false)
                     },
                 }
             }
@@ -196,14 +247,18 @@ impl RegexInfo {
                 let mut info = RegexInfo {
                     can_empty: false,
                     exact_set: None,
-                    prefix: HashSet::new(),
-                    suffix: HashSet::new(),
+                    prefix: StringSet::new(),
+                    suffix: StringSet::new(),
                     query: Query::all(),
                 };
                 for each_range in ranges {
                     let &ClassRange { start, end } = each_range;
-                    let next_range: HashSet<String> = {
-                        let mut h = HashSet::new();
+                    // if the class is too large, it's okay to overestimate
+                    if (end as u32 - start as u32) > 100 {
+                        return Self::any_char();
+                    }
+                    let next_range: StringSet = {
+                        let mut h = StringSet::new();
                         let it = CharRangeIter::new(start, end).expect("expected valid range");
                         for chr in it {
                             let mut s = String::new();
@@ -218,9 +273,10 @@ impl RegexInfo {
                         info.exact_set = Some(next_range);
                     }
                 }
-                info
+                simplify(info, false)
             },
             Expr::Group { e, .. } => {
+                println!("group");
                 RegexInfo::new(*e)
             },
         }
@@ -229,8 +285,8 @@ impl RegexInfo {
         RegexInfo {
             can_empty: false,
             exact_set: None,
-            prefix: HashSet::new(),
-            suffix: HashSet::new(),
+            prefix: StringSet::new(),
+            suffix: StringSet::new(),
             query: Query::new(QueryOperation::None),
         }
     }
@@ -238,8 +294,8 @@ impl RegexInfo {
         RegexInfo {
             can_empty: true,
             exact_set: Some(Self::hashset_with_only_emptystring()),
-            prefix: HashSet::new(),
-            suffix: HashSet::new(),
+            prefix: StringSet::new(),
+            suffix: StringSet::new(),
             query: Query::all(),
         }
     }
@@ -261,39 +317,46 @@ impl RegexInfo {
             query: Query::new(QueryOperation::All),
         }
     }
-    fn hashset_with_only_emptystring() -> HashSet<String> {
-        let mut h = HashSet::new();
+    fn hashset_with_only_emptystring() -> StringSet {
+        let mut h = StringSet::new();
         h.insert("".to_string());
         h
+    }
+    pub fn format_as_string(&self) -> String {
+        let mut s = String::new();
+        if self.can_empty {
+            s.push_str("canempty ");
+        }
+        if let Some(ref exact) = self.exact_set {
+            s.push_str("exact: ");
+            s.push_str(&(&exact.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+        } else {
+            s.push_str("prefix: ");
+            s.push_str(&(&self.prefix.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+            s.push_str(" suffix: ");
+            s.push_str(&(&self.suffix.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+        }
+        s.push_str(&format!(" match: {}", self.query.format_as_string()));
+        s
     }
 }
 
 fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
+    println!("concat {} ... {}", x.format_as_string(), y.format_as_string());
     let mut xy = RegexInfo::default();
 
-    // If all the possible strings in the cross product of x.suffix
-    // and y.prefix are long enough, then the trigram for one
-    // of them must be present and would not necessarily be
-    // accounted for in xy.prefix or xy.suffix yet.  Cut things off
-    // at maxSet just to keep the sets manageable.
-    xy.query = if x.exact_set.is_none() && y.exact_set.is_none() && x.suffix.len() <= 20 &&
-                  y.prefix.len() <= 20 &&
-                  (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3 {
-        and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
-    } else {
-        x.query.and(y.query)
-    };
-
     if let (&Some(ref x_s), &Some(ref y_s)) = (&x.exact_set, &y.exact_set) {
+        println!("if case {:?}, {:?}", x_s, y_s);
         xy.exact_set = Some(cross_product(&x_s, &y_s));
     } else {
+        println!("else case");
         if let &Some(ref x_s) = &x.exact_set {
             xy.prefix = cross_product(&x_s, &y.prefix);
         } else {
             xy.prefix = if x.can_empty {
-                x.prefix
-            } else {
                 union(&x.prefix, &y.prefix)
+            } else {
+                x.prefix
             };
         }
         if let &Some(ref y_s) = &y.exact_set {
@@ -307,14 +370,35 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
         }
     }
 
+    // If all the possible strings in the cross product of x.suffix
+    // and y.prefix are long enough, then the trigram for one
+    // of them must be present and would not necessarily be
+    // accounted for in xy.prefix or xy.suffix yet.  Cut things off
+    // at maxSet just to keep the sets manageable.
+    xy.query = if x.exact_set.is_none() && y.exact_set.is_none() && x.suffix.len() <= 20 &&
+                  y.prefix.len() <= 20 &&
+                  (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3 {
+        println!("second if case");
+        and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
+    } else {
+        println!("second else case");
+        x.query.and(y.query)
+    };
+
+    println!("concat: before simplify: {:?}", xy.format_as_string());
+    xy = simplify(xy, false);
+    println!("concat: after simplify: {:?}", xy.format_as_string());
     xy
 }
 
 /// Returns the RegexInfo for x|y given x and y
 fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
+    println!("alternate");
     let mut x = x;
     let mut y = y;
     let mut xy = RegexInfo::default();
+    let mut add_exact_x = false;
+    let mut add_exact_y = false;
     match (&x.exact_set, &y.exact_set) {
         (&Some(ref x_s), &Some(ref y_s)) => {
             xy.exact_set = Some(union(&x_s, y_s));
@@ -322,42 +406,135 @@ fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
         (&Some(ref x_s), &None) => {
             xy.prefix = union(&x_s, &y.prefix);
             xy.suffix = union(&x_s, &y.suffix);
-            x.query = and_trigrams(x.query, x_s);
+            add_exact_x = true;
         }
         (&None, &Some(ref y_s)) => {
             xy.prefix = union(&x.prefix, &y_s);
             xy.suffix = union(&x.suffix, &y_s);
-            y.query = and_trigrams(y.query, y_s);
+            add_exact_y = true;
         }
         _ => {
             xy.prefix = union(&x.prefix, &y.prefix);
             xy.suffix = union(&x.suffix, &y.suffix);
         }
     }
+    if add_exact_x { add_exact(&mut x); }
+    if add_exact_y { add_exact(&mut y); }
     xy.can_empty = x.can_empty || y.can_empty;
     xy.query = x.query.or(y.query);
     xy
 }
 
+fn add_exact(x: &mut RegexInfo) {
+    println!("add_exact");
+    let exact = if let Some(ref exact) = x.exact_set {
+        exact.clone()
+    } else {
+        return;
+    };
+    x.query = and_trigrams(x.query.clone(), &exact);
+}
+
+fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
+    println!("  simplify {} force={}", info.format_as_string(), force);
+    let do_simplify = if let Some(ref exact) = info.exact_set {
+        exact.len() > 7 
+            || (min_string_len(&exact) >= 3 && force)
+            || min_string_len(&exact) >= 4
+    } else {
+        false
+    };
+
+    println!("simplify? {}", do_simplify);
+    if do_simplify {
+        add_exact(&mut info);
+    }
+
+
+    if let Some(ref exact) = info.exact_set {
+        if exact.len() > 7 
+            || (min_string_len(&exact) >= 3 && force)
+            || min_string_len(&exact) >= 4
+        {
+            for s in exact {
+                let n = s.len();
+                if n < 3 {
+                    info.prefix.insert(s.clone());
+                    info.suffix.insert(s.clone());
+                } else {
+                    info.prefix.insert(s[..2].to_string());
+                    info.suffix.insert(s[n-2..].to_string());
+                }
+            }
+        }
+    }
+    if do_simplify {
+        info.exact_set = None;
+    }
+
+    if info.exact_set.is_none() {
+        info.query = simplify_set(info.query, &mut info.prefix, false);
+        info.query = simplify_set(info.query, &mut info.suffix, true);
+    }
+    info
+}
+
+fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool) -> Query {
+    println!("simplify_set");
+    q = and_trigrams(q, prefix_or_suffix);
+    println!("simplify_set: now match = {}", q.format_as_string());
+    let mut t = StringSet::new();
+    let mut n = 3;
+    while n == 3 || prefix_or_suffix.len() > 20 {
+        for string in prefix_or_suffix.iter() {
+            let mut s: &str = &string;
+            if s.len() > n {
+                s = if !is_suffix {
+                    &s[..n-1]
+                } else {
+                    &s[s.len()-n+1..]
+                };
+            }
+            t.insert(s.to_string());
+        }
+        n -= 1;
+    }
+    // Now make sure that the prefix/suffix sets aren't redundant.
+    // For example, if we know "ab" is a possible prefix, then it
+    // doesn't help at all to know that  "abc" is also a possible
+    // prefix, so delete "abc".
+
+    // let f = if is_suffix {
+    //     |a, b| b.is_suffix_of(a)
+    // } else {
+    //     |a, b| b.is_prefix_of(a)
+    // };
+
+    *prefix_or_suffix = t;
+    q
+}
+
 /// Returns the length of the shortest string in xs
-fn min_string_len(xs: &HashSet<String>) -> usize {
+fn min_string_len(xs: &StringSet) -> usize {
     xs.iter().map(String::len).min().unwrap()
 }
 
 /// Returns the cross product of s and t
-fn cross_product(s: &HashSet<Trigram>, t: &HashSet<Trigram>) -> HashSet<Trigram> {
-    let mut p = HashSet::new();
+fn cross_product(s: &BTreeSet<Trigram>, t: &BTreeSet<Trigram>) -> BTreeSet<Trigram> {
+    println!("cross");
+    let mut p = BTreeSet::new();
     for s_string in s {
         for t_string in t {
             let mut cross_string = s_string.clone();
             cross_string.push_str(&t_string);
+            println!("add {} to {:?}", cross_string, p);
             p.insert(cross_string);
         }
     }
     p
 }
 
-fn trigrams_imply(trigram: &HashSet<Trigram>, rhs: &Query) -> bool {
+fn trigrams_imply(trigram: &BTreeSet<Trigram>, rhs: &Query) -> bool {
     match rhs.operation {
         QueryOperation::Or => {
             if rhs.sub.iter().any(|s| trigrams_imply(trigram, s)) {
@@ -381,15 +558,18 @@ fn trigrams_imply(trigram: &HashSet<Trigram>, rhs: &Query) -> bool {
     }
 }
 
-fn and_trigrams(q: Query, t: &HashSet<Trigram>) -> Query {
+fn and_trigrams(q: Query, t: &BTreeSet<Trigram>) -> Query {
+    println!("and_trigrams");
     if min_string_len(t) < 3 {
         // If there is a short string, we can't guarantee
         // that any trigrams must be present, so use ALL.
         // q AND ALL = q.
+        println!("and_trigrams: min string too short: {}", min_string_len(t));
         return q;
     }
     let or = t.iter().fold(Query::none(), |or, t_string| {
-        let mut trigram = HashSet::<Trigram>::new();
+        println!("and_trigrams: work with {}", t_string);
+        let mut trigram = BTreeSet::<Trigram>::new();
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
         for i in 0..(t_string.len() - 2) {
@@ -415,6 +595,7 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
     // If q ⇒ r, q AND r ≡ q.
     // If q ⇒ r, q OR r ≡ r.
     if q.implies(&r) {
+        println!("{} implies {}", q.format_as_string(), r.format_as_string());
         if operation == QueryOperation::And {
             return q;
         } else {
@@ -422,6 +603,7 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
         }
     }
     if r.implies(&q) {
+        println!("{} implies {}", r.format_as_string(), q.format_as_string());
         if operation == QueryOperation::And {
             return r;
         } else {
@@ -431,8 +613,10 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
     // Both q and r are QAnd or QOr.
     // If they match or can be made to match, merge.
     if q.operation == operation && (r.operation == operation || r.is_atom()) {
+        println!("union! {:?} {:?}", q, r);
         q.trigram = union(&q.trigram, &r.trigram);
         q.sub.append(&mut r.sub);
+        println!("now it's {:?}", q);
         return q;
     }
     if r.operation == operation && q.is_atom() {
@@ -488,7 +672,7 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
         // Otherwise just create the op.
         Query {
             operation: operation,
-            trigram: HashSet::new(),
+            trigram: BTreeSet::new(),
             sub: vec![q, r],
         }
     }
@@ -531,14 +715,14 @@ impl Iterator for CharRangeIter {
     }
 }
 
-fn union<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
+fn union<T: Eq + Ord + Clone>(s: &BTreeSet<T>, t: &BTreeSet<T>) -> BTreeSet<T> {
     s.union(t).cloned().collect()
 }
 
-fn intersection<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
+fn intersection<T: Eq + Ord + Clone>(s: &BTreeSet<T>, t: &BTreeSet<T>) -> BTreeSet<T> {
     s.intersection(t).cloned().collect()
 }
 
-fn difference<T: Eq + Hash + Clone>(s: &HashSet<T>, t: &HashSet<T>) -> HashSet<T> {
+fn difference<T: Eq + Ord + Clone>(s: &BTreeSet<T>, t: &BTreeSet<T>) -> BTreeSet<T> {
     s.difference(t).cloned().collect()
 }
