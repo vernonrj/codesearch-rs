@@ -45,11 +45,16 @@ use super::postdatawriter::PostDataWriter;
 use std::io::{self, Write, Seek, SeekFrom, BufReader, BufWriter};
 use std::u32;
 use std::fs::File;
+use std::path::Path;
 
 
 
 
-pub fn merge(dest: String, src1: String, src2: String) -> io::Result<()> {
+pub fn merge<P1, P2, P3>(dest: P1, src1: P2, src2: P3) -> io::Result<()>
+    where P1: AsRef<Path>,
+          P2: AsRef<Path>,
+          P3: AsRef<Path>
+{
     let _frame_merge = libprofiling::profile("merge");
     let ix1 = try!(IndexReader::open(src1));
     let ix2 = try!(IndexReader::open(src2));

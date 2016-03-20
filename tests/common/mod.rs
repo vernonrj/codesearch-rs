@@ -35,3 +35,7 @@ pub fn build_flush_index<P: AsRef<Path>>(out: P,
     }
     ix.flush().unwrap();
 }
+
+pub fn tri<T: Into<char>>(x: T, y: T, z: T) -> u32 {
+    ((x.into() as u32) << 16) | ((y.into() as u32) << 8) | (z.into() as u32)
+}

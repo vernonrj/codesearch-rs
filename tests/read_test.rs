@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use self::tempfile::NamedTempFile;
 use self::libcsearch::reader::{PostReader, IndexReader};
 
-use common::build_index;
+use common::{tri, build_index};
 
 fn post_files() -> BTreeMap<&'static str, &'static str> {
     let mut m = BTreeMap::new();
@@ -20,9 +20,6 @@ fn post_files() -> BTreeMap<&'static str, &'static str> {
     m
 }
 
-fn tri(x: char, y: char, z: char) -> u32 {
-    ((x as u32) << 16) | ((y as u32) << 8) | (z as u32)
-}
 
 fn make_index() -> IndexReader {
     let f = NamedTempFile::new().unwrap();
