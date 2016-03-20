@@ -153,6 +153,12 @@ pub struct RegexInfo {
 
 impl RegexInfo {
     pub fn new(expr: Expr) -> Self {
+        let mut info = Self::analyze(expr);
+        info = simplify(info, true);
+        add_exact(&mut info);
+        info
+    }
+    fn analyze(expr: Expr) -> Self {
         match expr {
             Expr::Empty |
             Expr::StartLine |
@@ -168,15 +174,15 @@ impl RegexInfo {
                         let re1 = Expr::Class(CharClass::new(vec![ClassRange {
                                                                       start: chars[0],
                                                                       end: chars[0],
-                                                                  }]));
-                        RegexInfo::new(re1)
+                                                                  }]).case_fold());
+                        RegexInfo::analyze(re1)
                     }
                     _ => {
                         // Multi-letter case-folded string:
                         // treat as concatenation of single-letter case-folded strings.
                         chars.iter().fold(Self::empty_string(), |info, c| {
                             concat(info,
-                                   Self::new(Expr::Literal {
+                                   Self::analyze(Expr::Literal {
                                        chars: vec![*c],
                                        casei: true,
                                    }))
@@ -185,7 +191,6 @@ impl RegexInfo {
                 }
             }
             Expr::Literal {chars, casei: false} => {
-                println!("literal {:?}", chars);
                 let exact_set = {
                     let mut h = StringSet::new();
                     h.insert(chars.into_iter().collect());
@@ -202,27 +207,24 @@ impl RegexInfo {
             }
             Expr::AnyChar | Expr::AnyCharNoNL => Self::any_char(),
             Expr::Concat(exprs) => {
-                println!("OpConcat");
                 if exprs.is_empty() {
                     return Self::empty_string();
                 }
-                let mut exprs_it = exprs.into_iter().map(RegexInfo::new);
+                let mut exprs_it = exprs.into_iter().map(RegexInfo::analyze);
                 let first = exprs_it.next().unwrap();
                 exprs_it.fold(first, concat)
             }
             Expr::Alternate(v) => {
-                println!("OpAlternate");
                 if v.is_empty() {
                     return Self::no_match();
                 }
-                let mut analyzed = v.into_iter().map(RegexInfo::new);
+                let mut analyzed = v.into_iter().map(RegexInfo::analyze);
                 let first = analyzed.next().unwrap();
                 analyzed.fold(first, alternate)
             }
             Expr::Repeat {e, r, /* ref greedy */ .. } => {
-                println!("OpRepeat");
                 match r {
-                    Repeater::ZeroOrOne => alternate(RegexInfo::new(*e), Self::empty_string()),
+                    Repeater::ZeroOrOne => alternate(RegexInfo::analyze(*e), Self::empty_string()),
                     Repeater::ZeroOrMore | Repeater::Range {..} => {
                         // We don't know anything, so assume the worst.
                         Self::any_match()
@@ -232,7 +234,7 @@ impl RegexInfo {
                         // Since there has to be at least one x, the prefixes and suffixes
                         // stay the same.  If x was exact, it isn't anymore.
 
-                        let mut info = RegexInfo::new(*e);
+                        let mut info = RegexInfo::analyze(*e);
                         if let Some(i_s) = info.exact_set {
                             info.prefix = i_s.clone();
                             info.suffix = i_s;
@@ -276,8 +278,7 @@ impl RegexInfo {
                 simplify(info, false)
             },
             Expr::Group { e, .. } => {
-                println!("group");
-                RegexInfo::new(*e)
+                RegexInfo::analyze(*e)
             },
         }
     }
@@ -342,14 +343,13 @@ impl RegexInfo {
 }
 
 fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
-    println!("concat {} ... {}", x.format_as_string(), y.format_as_string());
     let mut xy = RegexInfo::default();
 
+    xy.query = x.query.and(y.query);
+
     if let (&Some(ref x_s), &Some(ref y_s)) = (&x.exact_set, &y.exact_set) {
-        println!("if case {:?}, {:?}", x_s, y_s);
         xy.exact_set = Some(cross_product(&x_s, &y_s));
     } else {
-        println!("else case");
         if let &Some(ref x_s) = &x.exact_set {
             xy.prefix = cross_product(&x_s, &y.prefix);
         } else {
@@ -375,25 +375,18 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     // of them must be present and would not necessarily be
     // accounted for in xy.prefix or xy.suffix yet.  Cut things off
     // at maxSet just to keep the sets manageable.
-    xy.query = if x.exact_set.is_none() && y.exact_set.is_none() && x.suffix.len() <= 20 &&
+    if x.exact_set.is_none() && y.exact_set.is_none() && x.suffix.len() <= 20 &&
                   y.prefix.len() <= 20 &&
                   (min_string_len(&x.suffix) + min_string_len(&y.prefix)) >= 3 {
-        println!("second if case");
-        and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
-    } else {
-        println!("second else case");
-        x.query.and(y.query)
-    };
+        xy.query = and_trigrams(xy.query, &cross_product(&x.suffix, &y.prefix))
+    }
 
-    println!("concat: before simplify: {:?}", xy.format_as_string());
     xy = simplify(xy, false);
-    println!("concat: after simplify: {:?}", xy.format_as_string());
     xy
 }
 
 /// Returns the RegexInfo for x|y given x and y
 fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
-    println!("alternate");
     let mut x = x;
     let mut y = y;
     let mut xy = RegexInfo::default();
@@ -422,11 +415,10 @@ fn alternate(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     if add_exact_y { add_exact(&mut y); }
     xy.can_empty = x.can_empty || y.can_empty;
     xy.query = x.query.or(y.query);
-    xy
+    simplify(xy, false)
 }
 
 fn add_exact(x: &mut RegexInfo) {
-    println!("add_exact");
     let exact = if let Some(ref exact) = x.exact_set {
         exact.clone()
     } else {
@@ -436,7 +428,6 @@ fn add_exact(x: &mut RegexInfo) {
 }
 
 fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
-    println!("  simplify {} force={}", info.format_as_string(), force);
     let do_simplify = if let Some(ref exact) = info.exact_set {
         exact.len() > 7 
             || (min_string_len(&exact) >= 3 && force)
@@ -445,7 +436,6 @@ fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
         false
     };
 
-    println!("simplify? {}", do_simplify);
     if do_simplify {
         add_exact(&mut info);
     }
@@ -480,15 +470,13 @@ fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
 }
 
 fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool) -> Query {
-    println!("simplify_set");
     q = and_trigrams(q, prefix_or_suffix);
-    println!("simplify_set: now match = {}", q.format_as_string());
     let mut t = StringSet::new();
     let mut n = 3;
     while n == 3 || prefix_or_suffix.len() > 20 {
         for string in prefix_or_suffix.iter() {
             let mut s: &str = &string;
-            if s.len() > n {
+            if s.len() >= n {
                 s = if !is_suffix {
                     &s[..n-1]
                 } else {
@@ -504,30 +492,38 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
     // doesn't help at all to know that  "abc" is also a possible
     // prefix, so delete "abc".
 
-    // let f = if is_suffix {
-    //     |a, b| b.is_suffix_of(a)
-    // } else {
-    //     |a, b| b.is_prefix_of(a)
-    // };
+    let f = |a: &str, b: &str| {
+        if is_suffix {
+            a.starts_with(b)
+        } else {
+            a.ends_with(b)
+        }
+    };
+    let mut u = StringSet::new();
+    let mut last: Option<String> = None;
+    for s in t {
+        if u.is_empty() || !f(&s, &last.as_ref().unwrap()) {
+            u.insert(s.clone());
+            last = Some(s.clone());
+        }
+    }
 
-    *prefix_or_suffix = t;
+    *prefix_or_suffix = u;
     q
 }
 
 /// Returns the length of the shortest string in xs
 fn min_string_len(xs: &StringSet) -> usize {
-    xs.iter().map(String::len).min().unwrap()
+    xs.iter().map(String::len).min().unwrap_or(0)
 }
 
 /// Returns the cross product of s and t
 fn cross_product(s: &BTreeSet<Trigram>, t: &BTreeSet<Trigram>) -> BTreeSet<Trigram> {
-    println!("cross");
     let mut p = BTreeSet::new();
     for s_string in s {
         for t_string in t {
             let mut cross_string = s_string.clone();
             cross_string.push_str(&t_string);
-            println!("add {} to {:?}", cross_string, p);
             p.insert(cross_string);
         }
     }
@@ -546,10 +542,10 @@ fn trigrams_imply(trigram: &BTreeSet<Trigram>, rhs: &Query) -> bool {
             return false;
         }
         QueryOperation::And => {
-            if !rhs.sub.iter().any(|s| trigrams_imply(trigram, s)) {
+            if rhs.sub.iter().any(|s| !trigrams_imply(trigram, s)) {
                 return false;
             }
-            if !trigram.iter().any(|s| rhs.trigram.contains(s)) {
+            if !rhs.trigram.is_subset(trigram) {
                 return false;
             }
             return true;
@@ -559,16 +555,13 @@ fn trigrams_imply(trigram: &BTreeSet<Trigram>, rhs: &Query) -> bool {
 }
 
 fn and_trigrams(q: Query, t: &BTreeSet<Trigram>) -> Query {
-    println!("and_trigrams");
     if min_string_len(t) < 3 {
         // If there is a short string, we can't guarantee
         // that any trigrams must be present, so use ALL.
         // q AND ALL = q.
-        println!("and_trigrams: min string too short: {}", min_string_len(t));
         return q;
     }
     let or = t.iter().fold(Query::none(), |or, t_string| {
-        println!("and_trigrams: work with {}", t_string);
         let mut trigram = BTreeSet::<Trigram>::new();
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
@@ -595,7 +588,6 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
     // If q ⇒ r, q AND r ≡ q.
     // If q ⇒ r, q OR r ≡ r.
     if q.implies(&r) {
-        println!("{} implies {}", q.format_as_string(), r.format_as_string());
         if operation == QueryOperation::And {
             return q;
         } else {
@@ -603,7 +595,6 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
         }
     }
     if r.implies(&q) {
-        println!("{} implies {}", r.format_as_string(), q.format_as_string());
         if operation == QueryOperation::And {
             return r;
         } else {
@@ -613,10 +604,8 @@ fn and_or(q: Query, r: Query, operation: QueryOperation) -> Query {
     // Both q and r are QAnd or QOr.
     // If they match or can be made to match, merge.
     if q.operation == operation && (r.operation == operation || r.is_atom()) {
-        println!("union! {:?} {:?}", q, r);
         q.trigram = union(&q.trigram, &r.trigram);
         q.sub.append(&mut r.sub);
-        println!("now it's {:?}", q);
         return q;
     }
     if r.operation == operation && q.is_atom() {

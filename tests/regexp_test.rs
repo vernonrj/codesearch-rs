@@ -9,8 +9,10 @@ use libcsearch::regexp::RegexInfo;
 macro_rules! regex_eq {
     ( $r:expr, $expected:expr ) => {
         {
-            let q = RegexInfo::new(Expr::parse($r.as_ref()).unwrap()).query;
-            println!("query = {:?}", q);
+            let regexinfo = RegexInfo::new(Expr::parse($r.as_ref()).unwrap());
+            println!("RegexInfo = {}", regexinfo.format_as_string());
+            let q = regexinfo.query;
+            println!("Query = {:?}", q);
             assert_eq!($expected.to_string(), q.format_as_string());
         };
     }
@@ -18,10 +20,10 @@ macro_rules! regex_eq {
 
 #[test]
 fn test_query() {
-	// regex_eq!(r"Abcdef", "\"Abc\" \"bcd\" \"cde\" \"def\"");
-	// regex_eq!(r"(abc)(def)", "\"abc\" \"bcd\" \"cde\" \"def\"");
-	// regex_eq!(r"abc.*(def|ghi)", "\"abc\" (\"def\"|\"ghi\")");
-	// regex_eq!(r"abc(def|ghi)", "\"abc\" (\"bcd\" \"cde\" \"def\")|(\"bcg\" \"cgh\" \"ghi\")");
+	regex_eq!(r"Abcdef", "\"Abc\" \"bcd\" \"cde\" \"def\"");
+	regex_eq!(r"(abc)(def)", "\"abc\" \"bcd\" \"cde\" \"def\"");
+	regex_eq!(r"abc.*(def|ghi)", "\"abc\" (\"def\"|\"ghi\")");
+	regex_eq!(r"abc(def|ghi)", "\"abc\" (\"bcd\" \"cde\" \"def\")|(\"bcg\" \"cgh\" \"ghi\")");
 	regex_eq!(r"a+hello", "\"ahe\" \"ell\" \"hel\" \"llo\"");
 	regex_eq!(r"(a+hello|b+world)", "(\"ahe\" \"ell\" \"hel\" \"llo\")|(\"bwo\" \"orl\" \"rld\" \"wor\")");
 	regex_eq!(r"a*bbb", "\"bbb\"");
@@ -32,7 +34,10 @@ fn test_query() {
 	regex_eq!(r"abc$", "\"abc\"");
 	regex_eq!(r"ab[cde]f", "(\"abc\" \"bcf\")|(\"abd\" \"bdf\")|(\"abe\" \"bef\")");
 	regex_eq!(r"(abc|bac)de", "\"cde\" (\"abc\" \"bcd\")|(\"acd\" \"bac\")");
+}
 
+#[test]
+fn test_query_short() {
 	// These don't have enough letters for a trigram, so they return the
 	// always matching query \"+\".
 	regex_eq!(r"ab[^cde]f", "+");
@@ -40,10 +45,16 @@ fn test_query() {
 	regex_eq!(r".", "+");
     // NOTE: the rust regex crate doesn't allow the empty group
 	// regex_eq!(r"()", "+");
+}
 
+#[test]
+fn test_query_no_matches() {
 	// No matches.
 	regex_eq!(r"[^\s\S]", "-");
+}
 
+#[test]
+fn test_query_factoring() {
 	// Factoring works.
 	regex_eq!(r"(abc|abc)", "\"abc\"");
 	regex_eq!(r"(ab|ab)c", "\"abc\"");
@@ -56,7 +67,10 @@ fn test_query() {
               "(\"abc\" \"def\")|(\"ghi\" \"jkl\")|(\"mno\" \"prs\")|(\"tuv\" \"wxy\")");
 	regex_eq!(r"(z*abcz*defz*)(z*(ghi|jkl)z*)", "\"abc\" \"def\" (\"ghi\"|\"jkl\")");
 	regex_eq!(r"(z*abcz*defz*)|(z*(ghi|jkl)z*)", "(\"ghi\"|\"jkl\")|(\"abc\" \"def\")");
+}
 
+#[test]
+fn test_query_prefix_suffix() {
 	// analyze keeps track of multiple possible prefix/suffixes.
 	regex_eq!(r"[ab][cd][ef]", "(\"ace\"|\"acf\"|\"ade\"|\"adf\"|\"bce\"|\"bcf\"|\"bde\"|\"bdf\")");
 	regex_eq!(r"ab[cd]e", "(\"abc\" \"bce\")|(\"abd\" \"bde\")");
@@ -66,7 +80,10 @@ fn test_query() {
 	regex_eq!(r"(a|b|c|d)(ef|g|hi|j)", "+");
 
 	regex_eq!(r"(?s).", "+");
+}
 
+#[test]
+fn test_query_expand_case() {
 	// Expanding case.
 	regex_eq!(r"(?i)a~~", "(\"A~~\"|\"a~~\")");
 	regex_eq!(r"(?i)ab~", "(\"AB~\"|\"Ab~\"|\"aB~\"|\"ab~\")");
@@ -74,7 +91,10 @@ fn test_query() {
 	regex_eq!(r"(?i)abc|def", "(\"ABC\"|\"ABc\"|\"AbC\"|\"Abc\"|\"DEF\"|\"DEf\"|\"DeF\"|\"Def\"|\"aBC\"|\"aBc\"|\"abC\"|\"abc\"|\"dEF\"|\"dEf\"|\"deF\"|\"def\")");
 	regex_eq!(r"(?i)abcd", "(\"ABC\"|\"ABc\"|\"AbC\"|\"Abc\"|\"aBC\"|\"aBc\"|\"abC\"|\"abc\") (\"BCD\"|\"BCd\"|\"BcD\"|\"Bcd\"|\"bCD\"|\"bCd\"|\"bcD\"|\"bcd\")");
 	regex_eq!(r"(?i)abc|abc", "(\"ABC\"|\"ABc\"|\"AbC\"|\"Abc\"|\"aBC\"|\"aBc\"|\"abC\"|\"abc\")");
+}
 
+#[test]
+fn test_query_word_boundary() {
 	// Word boundary.
 	regex_eq!(r"\b", "+");
 	regex_eq!(r"\B", "+");
@@ -85,3 +105,5 @@ fn test_query() {
 	regex_eq!(r"ab\bc", "\"abc\"");
 	regex_eq!(r"ab\Bc", "\"abc\"");
 }
+
+
