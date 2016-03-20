@@ -299,13 +299,13 @@ fn main() {
         let mut kv: Vec<_> = line_printer.num_matches.iter().collect();
         kv.sort();
         for (k, v) in kv {
-            println!("{}: {}", k.display(), v);
+            println!("{}: {}", maybe_make_relative(k).display(), v);
         }
     } else if match_options.files_with_matches_only {
         let mut v: Vec<_> = line_printer.num_matches.keys().collect();
         v.sort();
         for k in v {
-            println!("{}", k.display());
+            println!("{}", maybe_make_relative(k).display());
         }
     }
 
@@ -360,9 +360,7 @@ impl<'a> LinePrinter<'a> {
     }
     fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
-        let simplified_path = PathBuf::from(filename.as_ref()
-                                                    .strip_prefix(&env::current_dir().unwrap())
-                                                    .unwrap_or(filename.as_ref()));
+        let simplified_path = maybe_make_relative(filename);
         let path_component = self.maybe_add_color(&format!("{}", simplified_path.display()),
                                                   LinePart::Path);
         out_line.push_str(&path_component);
@@ -397,4 +395,10 @@ impl<'a> LinePrinter<'a> {
             text.to_string()
         }
     }
+}
+
+fn maybe_make_relative<P: AsRef<Path>>(p: P) -> PathBuf {
+    PathBuf::from(p.as_ref()
+                   .strip_prefix(&env::current_dir().unwrap())
+                   .unwrap_or(p.as_ref()))
 }
