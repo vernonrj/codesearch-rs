@@ -1,11 +1,8 @@
-extern crate libcindex;
-extern crate tempfile;
-
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 use std::ops::DerefMut;
 use std::num::Wrapping;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::u32;
 
 use tempfile::NamedTempFile;
@@ -132,7 +129,7 @@ fn test_write(do_flush: bool) {
     let mut f = NamedTempFile::new().unwrap();
     {
         let out = f.path();
-        build_flush_index(out, do_flush, trivial_files());
+        build_flush_index(out, vec![], do_flush, trivial_files());
     }
 
     let mut data = Vec::new();
@@ -148,12 +145,19 @@ fn test_write(do_flush: bool) {
     }
 }
 
-fn build_flush_index<'a>(out: &'a Path,
-                         do_flush: bool,
-                         file_data: BTreeMap<&'static str, &'static str>)
+pub fn build_index<P: AsRef<Path>>(out: P,
+                                   paths: Vec<PathBuf>,
+                                   file_data: BTreeMap<&'static str, &'static str>) {
+    build_flush_index(out, paths, false, file_data);
+}
+
+fn build_flush_index<P: AsRef<Path>>(out: P,
+                                     paths: Vec<PathBuf>,
+                                     do_flush: bool,
+                                     file_data: BTreeMap<&'static str, &'static str>)
 {
-    let mut ix = IndexWriter::new(out).unwrap();
-    ix.add_paths(vec![]);
+    let mut ix = IndexWriter::new(out.as_ref()).unwrap();
+    ix.add_paths(paths.into_iter().map(PathBuf::into_os_string));
     let mut files = file_data.keys().collect::<Vec<_>>();
     files.sort();
     for name in files {
@@ -166,3 +170,4 @@ fn build_flush_index<'a>(out: &'a Path,
     }
     ix.flush().unwrap();
 }
+
