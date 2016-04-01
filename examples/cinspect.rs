@@ -13,6 +13,7 @@ extern crate libcsearch;
 use libcsearch::reader::{POST_ENTRY_SIZE, IndexReader};
 use libcsearch::regexp::Query;
 
+use std::collections::HashSet;
 use std::env;
 use std::io::{self, Write};
 
@@ -64,8 +65,8 @@ fn main() {
 
     if let Some(t) = matches.value_of("with-trigram") {
         let t_num = u32::from_str_radix(t, 10).unwrap();
-        let mut v: Option<Vec<u32>> = None;
-        let file_ids = libcsearch::reader::PostReader::list(&idx, t_num, &mut v);
+        let mut h: Option<HashSet<u32>> = None;
+        let file_ids = libcsearch::reader::PostReader::list(&idx, t_num, &mut h);
         println!("{:?}", file_ids);
     }
 

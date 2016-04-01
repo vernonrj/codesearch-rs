@@ -21,7 +21,7 @@ use libcsearch::reader::IndexReader;
 use libcsearch::regexp::{RegexInfo, Query};
 
 use std::io::{self, Write};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -265,7 +265,7 @@ fn main() {
                        let name = index_reader.name(*file_id);
                        file_pattern.is_match(&name)
                    })
-                   .collect::<Vec<_>>();
+                   .collect::<HashSet<_>>();
     }
 
     // Search all possibly matching files for matches, printing the matching lines

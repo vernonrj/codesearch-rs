@@ -63,6 +63,7 @@
 // 	offset of posting list index [4]
 // 	"\ncsearch trailr\n"
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::io;
 use std::fmt;
@@ -193,21 +194,17 @@ impl IndexReader {
     }
 
     /// Takes a query and returns a list of matching file IDs.
-    pub fn query(&self, query: Query, mut restrict: Option<Vec<FileID>>) -> Vec<FileID> {
+    pub fn query(&self, query: Query, mut restrict: Option<HashSet<FileID>>) -> HashSet<FileID> {
         match query.operation {
-            QueryOperation::None => Vec::new(),
+            QueryOperation::None => HashSet::new(),
             QueryOperation::All => {
                 if restrict.is_some() {
                     return restrict.unwrap();
                 }
-                let mut v = Vec::<u32>::new();
-                for idx in 0..self.num_name {
-                    v.push(idx as FileID);
-                }
-                v
+                (0..self.num_name as u32).collect::<HashSet<FileID>>()
             }
             QueryOperation::And => {
-                let mut m_v: Option<Vec<FileID>> = None;
+                let mut m_v: Option<HashSet<FileID>> = None;
                 for trigram in query.trigram {
                     let bytes = trigram.as_bytes();
                     let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
@@ -217,25 +214,15 @@ impl IndexReader {
                     } else {
                         m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &mut restrict));
                     }
-                    if let Some(v) = m_v {
-                        if v.is_empty() {
-                            return v;
-                        } else {
-                            m_v = Some(v);
-                        }
-                    }
                 }
                 for sub in query.sub {
-                    // if m_v.is_none() {
-                    //     m_v = restrict;
-                    // }
-                    let v = self.query(sub, m_v);
-                    if v.len() == 0 {
-                        return v;
+                    if m_v.is_none() {
+                        m_v = restrict.clone();
                     }
+                    let v = self.query(sub, m_v);
                     m_v = Some(v);
                 }
-                return m_v.unwrap_or(Vec::new());
+                return m_v.unwrap_or(HashSet::new());
             }
             QueryOperation::Or => {
                 let mut m_v = None;
@@ -251,9 +238,9 @@ impl IndexReader {
                 }
                 for sub in query.sub {
                     let list1 = self.query(sub, restrict.clone());
-                    m_v = Some(merge_or(m_v.unwrap_or(Vec::new()), list1))
+                    m_v = Some(m_v.unwrap_or(HashSet::new()).union(&list1).cloned().collect());
                 }
-                return m_v.unwrap_or(Vec::new());
+                return m_v.unwrap_or(HashSet::new());
             }
         }
     }
@@ -358,26 +345,6 @@ impl IndexReader {
     }
 }
 
-fn merge_or(l1: Vec<u32>, l2: Vec<u32>) -> Vec<u32> {
-    let mut l = Vec::new();
-    let mut i = 0;
-    let mut j = 0;
-    while i < l1.len() || j < l2.len() {
-        if j == l2.len() || i < l1.len() && l1[i] < l2[j] {
-            l.push(l1[i]);
-            i += 1;
-        } else if i == l1.len() || (j < l2.len() && l1[i] > l2[j]) {
-            l.push(l2[j]);
-            j += 1;
-        } else if l1[i] == l2[j] {
-            l.push(l1[i]);
-            i += 1;
-            j += 1;
-        }
-    }
-    return l;
-}
-
 #[derive(Debug)]
 pub struct PostReader<'a, 'b> {
     index: &'a IndexReader,
@@ -385,13 +352,13 @@ pub struct PostReader<'a, 'b> {
     offset: u32,
     fileid: i64,
     d: &'a [u8],
-    restrict: &'b mut Option<Vec<u32>>,
+    restrict: &'b mut Option<HashSet<u32>>,
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
     pub fn new(index: &'a IndexReader,
                trigram: u32,
-               restrict: &'b mut Option<Vec<u32>>)
+               restrict: &'b mut Option<HashSet<u32>>)
                -> Option<Self> {
         let (count, offset) = index.find_list(trigram);
         if count == 0 {
@@ -412,63 +379,47 @@ impl<'a, 'b> PostReader<'a, 'b> {
         })
     }
     pub fn and(index: &'a IndexReader,
-               list: Vec<u32>,
+               list: HashSet<u32>,
                trigram: u32,
-               restrict: &'b mut Option<Vec<u32>>)
-               -> Vec<u32> {
+               restrict: &'b mut Option<HashSet<u32>>)
+               -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
-            let mut v = Vec::new();
-            let mut i = 0;
+            let mut h = HashSet::new();
             while r.next() {
                 let fileid = r.fileid;
-                while i < list.len() && (list[i] as i64) < fileid {
-                    i += 1;
-                }
-                if i < list.len() && (list[i] as i64) == fileid {
-                    assert!(fileid >= 0);
-                    v.push(fileid as u32);
-                    i += 1;
+                if list.contains(&(fileid as u32)) {
+                    h.insert(fileid as u32);
                 }
             }
-            v
+            h
         } else {
-            Vec::new()
+            HashSet::new()
         }
     }
     pub fn or(index: &'a IndexReader,
-              list: Vec<u32>,
+              list: HashSet<u32>,
               trigram: u32,
-              restrict: &'b mut Option<Vec<u32>>)
-              -> Vec<u32> {
+              restrict: &'b mut Option<HashSet<u32>>)
+              -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
-            let mut v = Vec::new();
-            let mut i = 0;
+            let mut h = list;
             while r.next() {
-                let fileid = r.fileid;
-                while i < list.len() && (list[i] as i64) < fileid {
-                    v.push(list[i] as u32);
-                    i += 1;
-                }
-                v.push(fileid as u32);
-                if i < list.len() && (list[i] as i64) == fileid {
-                    i += 1;
-                }
+                h.insert(r.fileid as u32);
             }
-            v.extend(&list[i..]);
-            v
+            h
         } else {
-            Vec::new()
+            HashSet::new()
         }
     }
-    pub fn list(index: &'a IndexReader, trigram: u32, restrict: &mut Option<Vec<u32>>) -> Vec<u32> {
+    pub fn list(index: &'a IndexReader, trigram: u32, restrict: &mut Option<HashSet<u32>>) -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
-            let mut x = Vec::<u32>::new();
+            let mut x = HashSet::<u32>::new();
             while r.next() {
-                x.push(r.fileid as u32);
+                x.insert(r.fileid as u32);
             }
             x
         } else {
-            Vec::new()
+            HashSet::new()
         }
     }
     // FIXME: refactor either to use rust iterator or don't look like an iterator
@@ -476,19 +427,16 @@ impl<'a, 'b> PostReader<'a, 'b> {
         while self.count > 0 {
             self.count -= 1;
             let (delta, n) = libvarint::read_uvarint(self.d).unwrap();
+            if n <= 0 || delta == 0 {
+                panic!("corrupt index");
+            }
             self.d = self.d.split_at(n as usize).1;
             self.fileid += delta as i64;
-            let mut is_fileid_found = true;
-            if let Some(ref mut r) = *self.restrict {
-                let mut i = 0;
-                while i < r.len() && (r[i] as i64) < self.fileid {
-                    i += 1;
-                }
-                *r = r.split_off(i);
-                if r.is_empty() || (r[0] as i64) != self.fileid {
-                    is_fileid_found = false;
-                }
-            }
+            let is_fileid_found = match *self.restrict {
+                Some(ref r) if r.contains(&(self.fileid as u32)) => true,
+                None => true,
+                _ => false
+            };
             if !is_fileid_found {
                 continue;
             }

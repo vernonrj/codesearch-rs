@@ -5,7 +5,7 @@ extern crate libcsearch;
 
 mod common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use self::tempfile::NamedTempFile;
@@ -73,7 +73,9 @@ fn test_merge() {
     fn check(ix: &IndexReader, trig: &str, l: &[u32]) {
         let t = trig.chars().collect::<Vec<char>>();
         let l1 = PostReader::list(ix, tri(t[0], t[1], t[2]), &mut None);
-        assert_eq!(l1, l);
+        let mut h: HashSet<u32> = HashSet::new();
+        h.extend(l.iter().cloned());
+        assert_eq!(l1, h);
     }
 
     check(&ix1, "wor", &[0, 1]);

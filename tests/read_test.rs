@@ -4,12 +4,24 @@ extern crate libcsearch;
 
 mod common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use self::tempfile::NamedTempFile;
 use self::libcsearch::reader::{PostReader, IndexReader};
 
 use common::{tri, build_index};
+
+macro_rules! set {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut temp_set = HashSet::new();
+            $(
+                temp_set.insert($x);
+            )*
+            temp_set
+        }
+    }
+}
 
 fn post_files() -> BTreeMap<&'static str, &'static str> {
     let mut m = BTreeMap::new();
@@ -32,9 +44,9 @@ fn make_index() -> IndexReader {
 fn test_postreader_list() {
     let ix = make_index();
     assert_eq!(PostReader::list(&ix, tri('S', 'e', 'a'), &mut None),
-               vec![1, 3]);
+               set![1, 3]);
     assert_eq!(PostReader::list(&ix, tri('G', 'o', 'o'), &mut None),
-               vec![1, 2, 3]);
+               set![1, 2, 3]);
 }
 
 #[test]
@@ -44,12 +56,12 @@ fn test_postreader_and() {
                                PostReader::list(&ix, tri('S', 'e', 'a'), &mut None),
                                tri('G', 'o', 'o'),
                                &mut None),
-               vec![1, 3]);
+               set![1, 3]);
     assert_eq!(PostReader::and(&ix,
                                PostReader::list(&ix, tri('G', 'o', 'o'), &mut None),
                                tri('S', 'e', 'a'),
                                &mut None),
-               vec![1, 3]);
+               set![1, 3]);
 }
 
 #[test]
@@ -59,10 +71,10 @@ fn test_postreader_or() {
                               PostReader::list(&ix, tri('G', 'o', 'o'), &mut None),
                               tri('S', 'e', 'a'),
                               &mut None),
-               vec![1, 2, 3]);
+               set![1, 2, 3]);
     assert_eq!(PostReader::or(&ix,
                               PostReader::list(&ix, tri('S', 'e', 'a'), &mut None),
                               tri('G', 'o', 'o'),
                               &mut None),
-               vec![1, 2, 3]);
+               set![1, 2, 3]);
 }
