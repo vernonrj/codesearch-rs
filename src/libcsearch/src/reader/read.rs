@@ -194,7 +194,7 @@ impl IndexReader {
     }
 
     /// Takes a query and returns a list of matching file IDs.
-    pub fn query(&self, query: Query, mut restrict: Option<HashSet<FileID>>) -> HashSet<FileID> {
+    pub fn query(&self, query: Query, restrict: Option<HashSet<FileID>>) -> HashSet<FileID> {
         match query.operation {
             QueryOperation::None => HashSet::new(),
             QueryOperation::All => {
@@ -210,9 +210,9 @@ impl IndexReader {
                     let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
                                   (bytes[2] as u32);
                     if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
+                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
                     } else {
-                        m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &mut restrict));
+                        m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &restrict));
                     }
                 }
                 for sub in query.sub {
@@ -231,9 +231,9 @@ impl IndexReader {
                     let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
                                   (bytes[2] as u32);
                     if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &mut restrict));
+                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
                     } else {
-                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &mut restrict));
+                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &restrict));
                     }
                 }
                 for sub in query.sub {
@@ -352,13 +352,13 @@ pub struct PostReader<'a, 'b> {
     offset: u32,
     fileid: i64,
     d: &'a [u8],
-    restrict: &'b mut Option<HashSet<u32>>,
+    restrict: &'b Option<HashSet<u32>>,
 }
 
 impl<'a, 'b> PostReader<'a, 'b> {
     pub fn new(index: &'a IndexReader,
                trigram: u32,
-               restrict: &'b mut Option<HashSet<u32>>)
+               restrict: &'b Option<HashSet<u32>>)
                -> Option<Self> {
         let (count, offset) = index.find_list(trigram);
         if count == 0 {
@@ -381,7 +381,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     pub fn and(index: &'a IndexReader,
                list: HashSet<u32>,
                trigram: u32,
-               restrict: &'b mut Option<HashSet<u32>>)
+               restrict: &'b Option<HashSet<u32>>)
                -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut h = HashSet::new();
@@ -399,7 +399,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
     pub fn or(index: &'a IndexReader,
               list: HashSet<u32>,
               trigram: u32,
-              restrict: &'b mut Option<HashSet<u32>>)
+              restrict: &'b Option<HashSet<u32>>)
               -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut h = list;
@@ -411,7 +411,7 @@ impl<'a, 'b> PostReader<'a, 'b> {
             HashSet::new()
         }
     }
-    pub fn list(index: &'a IndexReader, trigram: u32, restrict: &mut Option<HashSet<u32>>) -> HashSet<u32> {
+    pub fn list(index: &'a IndexReader, trigram: u32, restrict: &Option<HashSet<u32>>) -> HashSet<u32> {
         if let Some(mut r) = Self::new(index, trigram, restrict) {
             let mut x = HashSet::<u32>::new();
             while r.next() {
