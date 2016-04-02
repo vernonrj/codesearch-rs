@@ -227,7 +227,8 @@ fn main() {
         files_with_matches_only: matches.is_present("files-with-matches"),
         line_number: matches.is_present("line-number") ||
                      matches.is_present("visual-studio-format"),
-        with_color: !matches.is_present("nocolor") && is_color_output_available(),
+        with_color: !matches.is_present("nocolor") && !matches.is_present("visual-studio-format") &&
+                    is_color_output_available(),
         max_count: matches.value_of("NUM").map(|s| {
             match usize::from_str_radix(s, 10) {
                 Ok(n) => n,
@@ -295,17 +296,18 @@ fn main() {
             }
         }
     }
+    let path_simp = PathSimplifier::from(&match_options);
     if match_options.print_count {
         let mut kv: Vec<_> = line_printer.num_matches.iter().collect();
         kv.sort();
         for (k, v) in kv {
-            println!("{}: {}", maybe_make_relative(k).display(), v);
+            println!("{}: {}", path_simp.maybe_make_relative(k).display(), v);
         }
     } else if match_options.files_with_matches_only {
         let mut v: Vec<_> = line_printer.num_matches.keys().collect();
         v.sort();
         for k in v {
-            println!("{}", maybe_make_relative(k).display());
+            println!("{}", path_simp.maybe_make_relative(k).display());
         }
     }
 
@@ -360,7 +362,7 @@ impl<'a> LinePrinter<'a> {
     }
     fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
-        let simplified_path = maybe_make_relative(filename);
+        let simplified_path = PathSimplifier::from(self.options).maybe_make_relative(filename);
         let path_component = self.maybe_add_color(&format!("{}", simplified_path.display()),
                                                   LinePart::Path);
         out_line.push_str(&path_component);
@@ -397,8 +399,24 @@ impl<'a> LinePrinter<'a> {
     }
 }
 
-fn maybe_make_relative<P: AsRef<Path>>(p: P) -> PathBuf {
-    PathBuf::from(p.as_ref()
-                   .strip_prefix(&env::current_dir().unwrap())
-                   .unwrap_or(p.as_ref()))
+struct PathSimplifier {
+    make_relative: bool,
+}
+
+impl<'a> From<&'a MatchOptions> for PathSimplifier {
+    fn from(o: &'a MatchOptions) -> Self {
+        PathSimplifier { make_relative: o.print_format != PrintFormat::VisualStudio }
+    }
+}
+
+impl PathSimplifier {
+    fn maybe_make_relative<P: AsRef<Path>>(&self, p: P) -> PathBuf {
+        if self.make_relative {
+            PathBuf::from(p.as_ref()
+                           .strip_prefix(&env::current_dir().unwrap())
+                           .unwrap_or(p.as_ref()))
+        } else {
+            PathBuf::from(p.as_ref())
+        }
+    }
 }
