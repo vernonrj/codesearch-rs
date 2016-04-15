@@ -73,8 +73,8 @@ fn main() {
 }
 
 fn print_indexed_files(idx: &IndexReader) {
-    let post = idx.query(Query::all(), None);
-    for each_fileid in post {
+    let post = idx.query(Query::all());
+    for each_fileid in post.into_inner() {
         println!("{}: {}", each_fileid, idx.name(each_fileid));
     }
 }

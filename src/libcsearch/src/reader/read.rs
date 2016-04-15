@@ -100,9 +100,9 @@ pub type FileID = u32;
 ///
 /// let idx = try!(IndexReader::open("foo.txt"));
 ///
-/// let matching_file_ids = idx.query(q, None);
+/// let matching_file_ids = idx.query(q);
 ///
-/// for each in matching_file_ids {
+/// for each in matching_file_ids.into_inner() {
 ///    println!("filename = {}", idx.name(each));
 /// }
 /// # Ok(())
@@ -194,53 +194,88 @@ impl IndexReader {
     }
 
     /// Takes a query and returns a list of matching file IDs.
-    pub fn query(&self, query: Query, restrict: Option<HashSet<FileID>>) -> HashSet<FileID> {
+    pub fn query<'a>(&'a self, query: Query) -> PostSet<'a> {
         match query.operation {
-            QueryOperation::None => HashSet::new(),
-            QueryOperation::All => {
-                if restrict.is_some() {
-                    return restrict.unwrap();
-                }
-                (0..self.num_name as u32).collect::<HashSet<FileID>>()
-            }
+            QueryOperation::None => PostSet::new(self),
+            QueryOperation::All => PostSet {
+                index: self,
+                list: (0..self.num_name as u32).collect::<HashSet<FileID>>()
+            },
             QueryOperation::And => {
-                let mut m_v: Option<HashSet<FileID>> = None;
-                for trigram in query.trigram {
-                    let bytes = trigram.as_bytes();
-                    let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
-                                  (bytes[2] as u32);
-                    if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
-                    } else {
-                        m_v = Some(PostReader::and(&self, m_v.unwrap(), tri_val, &restrict));
-                    }
-                }
-                for sub in query.sub {
-                    if m_v.is_none() {
-                        m_v = restrict.clone();
-                    }
-                    let v = self.query(sub, m_v);
-                    m_v = Some(v);
-                }
-                return m_v.unwrap_or(HashSet::new());
+                let mut trigram_it = query.trigram
+                    .into_iter()
+                    .map(|t| {
+                        let b = t.as_bytes();
+                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                    });
+                let post_set = if let Some(i) = trigram_it.next() {
+                    let s = PostSet::new(self).or(i).unwrap_or(PostSet::new(self));
+                    Some(trigram_it.fold(s, |a, b| a.and(b).unwrap_or(PostSet::new(self))))
+                } else {
+                    None
+                };
+                let mut sub_it = query.sub.into_iter();
+                let init = post_set
+                    .or_else(|| sub_it.next().map(|q| self.query(q)))
+                    .unwrap_or(PostSet::new(self));
+                sub_it.fold(init, |a, b| self.query_inner(b, a))
+            },
+            QueryOperation::Or => {
+                println!("OR");
+                let trigram_it = query.trigram
+                    .into_iter()
+                    .map(|t| {
+                        let b = t.as_bytes();
+                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                    });
+                let post_set = trigram_it.fold(PostSet::new(self), |a, b| {
+                    println!("a = {:?}", a.list);
+                    println!("b = {:?}", b);
+                    a.or(b).unwrap_or(PostSet::new(self))
+                });
+                query.sub.into_iter().fold(post_set, |a, b| self.query_inner(b, a))
+            }
+        }
+    }
+
+    fn query_inner<'a>(&'a self, query: Query, state: PostSet<'a>) -> PostSet<'a> {
+        match query.operation {
+            QueryOperation::None => PostSet::new(self),
+            QueryOperation::All => state,
+            QueryOperation::And => {
+                let mut trigram_it = query.trigram
+                    .into_iter()
+                    .map(|t| {
+                        let b = t.as_bytes();
+                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                    });
+                let post_set = if let Some(i) = trigram_it.next() {
+                    let s = state.and(i).unwrap_or(PostSet::new(self));
+                    trigram_it.fold(s, |a, b| {
+                        a.and(b).unwrap_or(PostSet::new(self))
+                    })
+                } else {
+                    state
+                };
+                query.sub.into_iter().fold(post_set, |a, b| self.query_inner(b, a))
             }
             QueryOperation::Or => {
-                let mut m_v = None;
-                for trigram in query.trigram {
-                    let bytes = trigram.as_bytes();
-                    let tri_val = (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 |
-                                  (bytes[2] as u32);
-                    if m_v.is_none() {
-                        m_v = Some(PostReader::list(&self, tri_val, &restrict));
-                    } else {
-                        m_v = Some(PostReader::or(&self, m_v.unwrap(), tri_val, &restrict));
-                    }
-                }
-                for sub in query.sub {
-                    let list1 = self.query(sub, restrict.clone());
-                    m_v = Some(m_v.unwrap_or(HashSet::new()).union(&list1).cloned().collect());
-                }
-                return m_v.unwrap_or(HashSet::new());
+                println!("OR");
+                let trigram_it = query.trigram
+                    .into_iter()
+                    .map(|t| {
+                        let b = t.as_bytes();
+                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                    });
+                let post_set = trigram_it.fold(state, |a, b| {
+                    println!("a = {:?}", a.list);
+                    println!("b = {:?}", b);
+                    a.or(b).unwrap_or(PostSet::new(self))
+                });
+                query.sub.into_iter().fold(post_set, |a, b| {
+                    println!("folding sub pieces: {:?}, {:?}", a.list, b);
+                    self.query_inner(b, a)
+                })
             }
         }
     }
@@ -446,5 +481,75 @@ impl<'a, 'b> PostReader<'a, 'b> {
         // FIXME: add bounds checking
         self.fileid = -1;
         return false;
+    }
+}
+
+pub struct PostSet<'a> {
+    index: &'a IndexReader,
+    list: HashSet<u32>
+}
+
+impl<'a> PostSet<'a> {
+    pub fn new(index: &'a IndexReader) -> Self {
+        PostSet {
+            index: index,
+            list: HashSet::new()
+        }
+    }
+    pub fn into_inner(self) -> HashSet<u32> { self.list.clone() }
+    pub fn and(self, trigram: u32) -> Option<Self> {
+        let (mut d, count) = unsafe {
+            if let Some(tup) = Self::make_view(&self.index, trigram) {
+                tup
+            } else {
+                return None;
+            }
+        };
+        let mut fileid = -1;
+        let mut h = HashSet::new();
+        for _ in 0 .. count {
+            let (delta, n) = libvarint::read_uvarint(d).unwrap();
+            if n <= 0 || delta == 0 {
+                panic!("corrupt index");
+            }
+            d = d.split_at(n as usize).1;
+            fileid += delta as i64;
+            if self.list.contains(&(fileid as u32)) {
+                h.insert(fileid as u32);
+            }
+        }
+        Some(PostSet {
+            index: self.index,
+            list: h
+        })
+    }
+    pub fn or(mut self, trigram: u32) -> Option<Self> {
+        let (mut d, count) = unsafe {
+            if let Some(tup) = Self::make_view(&self.index, trigram) {
+                tup
+            } else {
+                return None;
+            }
+        };
+        let mut fileid = -1;
+        for _ in 0 .. count {
+            let (delta, n) = libvarint::read_uvarint(d).unwrap();
+            if n <= 0 || delta == 0 {
+                panic!("corrupt index");
+            }
+            d = d.split_at(n as usize).1;
+            fileid += delta as i64;
+            self.list.insert(fileid as u32);
+        }
+        Some(self)
+    }
+    unsafe fn make_view(index: &'a IndexReader, trigram: u32) -> Option<(&'a [u8], usize)> {
+        let (count, offset) = index.find_list(trigram);
+        if count == 0 {
+            return None;
+        }
+        let v = index.data.as_slice();
+        let split_point = (index.post_data as usize) + (offset as usize) + 3;
+        Some((v.split_at(split_point).1, count as usize))
     }
 }

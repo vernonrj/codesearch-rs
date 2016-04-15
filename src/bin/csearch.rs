@@ -245,14 +245,14 @@ fn main() {
     };
 
     // Find all possibly matching files using the pseudo-regexp
-    let mut post = if matches.is_present("bruteforce") {
-        index_reader.query(Query::all(), None)
+    let mut post: HashSet<u32> = if matches.is_present("bruteforce") {
+        index_reader.query(Query::all()).into_inner()
     } else {
         // Get the pseudo-regexp (built using trigrams)
         let expr = regex_syntax::Expr::parse(&pattern).unwrap();
         let q = RegexInfo::new(expr).query;
 
-        index_reader.query(q, None)
+        index_reader.query(q).into_inner()
     };
 
     // If provided, filter possibly matching files via FILE_PATTERN

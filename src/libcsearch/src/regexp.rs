@@ -452,8 +452,10 @@ fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
                     info.prefix.insert(s.clone());
                     info.suffix.insert(s.clone());
                 } else {
-                    info.prefix.insert(s[..2].to_string());
-                    info.suffix.insert(s[n-2..].to_string());
+                    let first_three_chars = s.chars().take(2).collect();
+                    let rest = s.chars().skip(n-2).collect();
+                    info.prefix.insert(first_three_chars);
+                    info.suffix.insert(rest);
                 }
             }
         }
@@ -471,20 +473,21 @@ fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
 
 fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool) -> Query {
     q = and_trigrams(q, prefix_or_suffix);
-    let mut t = StringSet::new();
     let mut n = 3;
     while n == 3 || prefix_or_suffix.len() > 20 {
+        let mut t = StringSet::new();
         for string in prefix_or_suffix.iter() {
-            let mut s: &str = &string;
+            let mut s = string.clone();
             if s.len() >= n {
                 s = if !is_suffix {
-                    &s[..n-1]
+                    s.chars().take(n-1).collect()
                 } else {
-                    &s[s.len()-n+1..]
+                    s.chars().skip(s.len()-n+1).collect()
                 };
             }
-            t.insert(s.to_string());
+            t.insert(s);
         }
+        *prefix_or_suffix = t;
         n -= 1;
     }
     // Now make sure that the prefix/suffix sets aren't redundant.
@@ -501,7 +504,7 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
     };
     let mut u = StringSet::new();
     let mut last: Option<String> = None;
-    for s in t {
+    for s in prefix_or_suffix.iter() {
         if u.is_empty() || !f(&s, &last.as_ref().unwrap()) {
             u.insert(s.clone());
             last = Some(s.clone());

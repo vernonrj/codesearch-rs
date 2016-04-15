@@ -34,6 +34,7 @@ fn test_query() {
     regex_eq!(r"abc$", "\"abc\"");
     regex_eq!(r"ab[cde]f", "(\"abc\" \"bcf\")|(\"abd\" \"bdf\")|(\"abe\" \"bef\")");
     regex_eq!(r"(abc|bac)de", "\"cde\" (\"abc\" \"bcd\")|(\"acd\" \"bac\")");
+    RegexInfo::new(Expr::parse(r"hello\s").unwrap());
 }
 
 #[test]
