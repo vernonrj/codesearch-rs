@@ -35,7 +35,7 @@ use libcsearch::reader::IndexReader;
 use writer::{get_offset, copy_file};
 use libprofiling;
 
-use tempfile::TempFile;
+use tempfile::tempfile;
 use byteorder::{BigEndian, WriteBytesExt};
 use consts;
 
@@ -156,7 +156,7 @@ pub fn merge<P1, P2, P3>(dest: P1, src1: P2, src2: P3) -> io::Result<()>
 
     // Merged list of names
     let name_data = try!(get_offset(&mut ix3));
-    let mut name_index_file = BufWriter::new(try!(TempFile::new()));
+    let mut name_index_file = BufWriter::new(try!(tempfile()));
 
     new = 0;
     mi1 = 0;
@@ -229,7 +229,7 @@ pub fn merge<P1, P2, P3>(dest: P1, src1: P2, src2: P3) -> io::Result<()>
 fn merge_list_of_posting_lists(mut r1: PostMapReader,
                                mut r2: PostMapReader,
                                ix3: &mut BufWriter<File>)
-                               -> io::Result<BufWriter<TempFile>> {
+                               -> io::Result<BufWriter<File>> {
     // Merged list of posting lists.
     let mut w = try!(PostDataWriter::new(ix3));
 
