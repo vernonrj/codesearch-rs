@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
 
+use regex::Regex;
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -43,7 +44,7 @@ pub enum LinePart {
 
 #[derive(Debug)]
 pub struct MatchOptions {
-    pub pattern: regex::Regex,
+    pub pattern: Regex,
     pub print_format: PrintFormat,
     pub print_count: bool,
     pub ignore_case: bool,
@@ -204,7 +205,7 @@ fn main() {
         let multiline_flag = "(?m)";
         String::from(ignore_case_flag) + multiline_flag + user_pattern
     };
-    let regex_pattern = match regex::Regex::new(&pattern) {
+    let regex_pattern = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => panic!("PATTERN: {}", e),
     };
@@ -257,7 +258,7 @@ fn main() {
 
     // If provided, filter possibly matching files via FILE_PATTERN
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
-        let file_pattern = match regex::Regex::new(&file_pattern_str) {
+        let file_pattern = match Regex::new(&file_pattern_str) {
             Ok(r) => r,
             Err(e) => panic!("FILE_PATTERN: {}", e),
         };

@@ -221,7 +221,6 @@ impl IndexReader {
                 sub_it.fold(init, |a, b| self.query_inner(b, a))
             },
             QueryOperation::Or => {
-                println!("OR");
                 let trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
@@ -229,8 +228,6 @@ impl IndexReader {
                         (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
                     });
                 let post_set = trigram_it.fold(PostSet::new(self), |a, b| {
-                    println!("a = {:?}", a.list);
-                    println!("b = {:?}", b);
                     a.or(b).unwrap_or(PostSet::new(self))
                 });
                 query.sub.into_iter().fold(post_set, |a, b| self.query_inner(b, a))
@@ -260,7 +257,6 @@ impl IndexReader {
                 query.sub.into_iter().fold(post_set, |a, b| self.query_inner(b, a))
             }
             QueryOperation::Or => {
-                println!("OR");
                 let trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
@@ -268,12 +264,9 @@ impl IndexReader {
                         (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
                     });
                 let post_set = trigram_it.fold(state, |a, b| {
-                    println!("a = {:?}", a.list);
-                    println!("b = {:?}", b);
                     a.or(b).unwrap_or(PostSet::new(self))
                 });
                 query.sub.into_iter().fold(post_set, |a, b| {
-                    println!("folding sub pieces: {:?}, {:?}", a.list, b);
                     self.query_inner(b, a)
                 })
             }

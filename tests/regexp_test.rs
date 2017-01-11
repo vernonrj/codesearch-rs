@@ -34,7 +34,27 @@ fn test_query() {
     regex_eq!(r"abc$", "\"abc\"");
     regex_eq!(r"ab[cde]f", "(\"abc\" \"bcf\")|(\"abd\" \"bdf\")|(\"abe\" \"bef\")");
     regex_eq!(r"(abc|bac)de", "\"cde\" (\"abc\" \"bcd\")|(\"acd\" \"bac\")");
-    RegexInfo::new(Expr::parse(r"hello\s").unwrap());
+}
+
+#[test]
+fn test_case_insensitive() {
+    RegexInfo::new(Expr::parse(r"(?i)abcd efgh").unwrap());
+}
+
+#[test]
+fn test_space() {
+    regex_eq!(r"\s", "+");
+    // this is different from the go version because the rust
+    // version considers unicode spaces too
+    regex_eq!(r"a\sb", "+");
+
+    regex_eq!(r"abc[ \t\na-zA-Z0-9]def", "\"abc\" \"def\"");
+}
+
+#[test]
+fn test_digit() {
+    regex_eq!(r"\d", "+");
+    regex_eq!(r"\d+", "+");
 }
 
 #[test]
