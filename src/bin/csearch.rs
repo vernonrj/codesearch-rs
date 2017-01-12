@@ -21,7 +21,7 @@ use libcsearch::reader::IndexReader;
 use libcsearch::regexp::{RegexInfo, Query};
 
 use std::io::{self, Write};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, BTreeSet};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -246,13 +246,13 @@ fn main() {
     };
 
     // Find all possibly matching files using the pseudo-regexp
-    let mut post: HashSet<u32> = if matches.is_present("bruteforce") {
+    let mut post: BTreeSet<u32> = if matches.is_present("bruteforce") {
         index_reader.query(Query::all()).into_inner()
     } else {
         // Get the pseudo-regexp (built using trigrams)
         let expr = regex_syntax::ExprBuilder::new().unicode(false).parse(&pattern).unwrap();
         let q = RegexInfo::new(expr).unwrap().query;
-        // println!("query = {}", q.format_as_string());
+        // panic!("query = {} --- {:?}", q.format_as_string(), q);
 
         index_reader.query(q).into_inner()
     };
@@ -269,7 +269,7 @@ fn main() {
                        let name = index_reader.name(*file_id);
                        file_pattern.is_match(&name)
                    })
-                   .collect::<HashSet<_>>();
+                   .collect::<BTreeSet<_>>();
     }
 
     // Search all possibly matching files for matches, printing the matching lines
