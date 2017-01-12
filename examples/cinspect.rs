@@ -13,7 +13,7 @@ extern crate libcsearch;
 use libcsearch::reader::{POST_ENTRY_SIZE, IndexReader};
 use libcsearch::regexp::Query;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::env;
 use std::io::{self, Write};
 
@@ -21,27 +21,26 @@ fn main() {
     libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
 
     let matches = clap::App::new("cinspect")
-                      .version(&crate_version!()[..])
-                      .author("Vernon Jones <vernonrjones@gmail.com>")
-                      .about("helper tool to inspect index files")
-                      .arg(clap::Arg::with_name("INDEX_FILE")
-                               .long("indexpath")
-                               .takes_value(true)
-                               .help("use specified INDEX_FILE as the index path. overwrites \
-                                      $CSEARCHINDEX."))
-                      .arg(clap::Arg::with_name("files")
-                               .long("files")
-                               .short("f")
-                               .help("list indexed files"))
-                      .arg(clap::Arg::with_name("with-trigram")
-                               .long("with-trigram")
-                               .short("t")
-                               .help("list all files that contain trigram")
-                               .takes_value(true))
-                      .arg(clap::Arg::with_name("postinglist")
-                               .long("posting-list")
-                               .help("Prints the posting list"))
-                      .get_matches();
+        .version(&crate_version!()[..])
+        .author("Vernon Jones <vernonrjones@gmail.com>")
+        .about("helper tool to inspect index files")
+        .arg(clap::Arg::with_name("INDEX_FILE")
+            .long("indexpath")
+            .takes_value(true)
+            .help("use specified INDEX_FILE as the index path. overwrites $CSEARCHINDEX."))
+        .arg(clap::Arg::with_name("files")
+            .long("files")
+            .short("f")
+            .help("list indexed files"))
+        .arg(clap::Arg::with_name("with-trigram")
+            .long("with-trigram")
+            .short("t")
+            .help("list all files that contain trigram")
+            .takes_value(true))
+        .arg(clap::Arg::with_name("postinglist")
+            .long("posting-list")
+            .help("Prints the posting list"))
+        .get_matches();
 
     // possibly override the csearchindex
     matches.value_of("INDEX_FILE").map(|p| {
@@ -65,7 +64,7 @@ fn main() {
 
     if let Some(t) = matches.value_of("with-trigram") {
         let t_num = u32::from_str_radix(t, 10).unwrap();
-        let mut h: Option<HashSet<u32>> = None;
+        let mut h: Option<BTreeSet<u32>> = None;
         let file_ids = libcsearch::reader::PostReader::list(&idx, t_num, &mut h);
         println!("{:?}", file_ids);
     }
@@ -82,10 +81,10 @@ fn print_indexed_files(idx: &IndexReader) {
 fn dump_posting_list(idx: &IndexReader) -> io::Result<()> {
     let d: &[u8] = unsafe {
         idx.as_slice()
-           .split_at(idx.post_index)
-           .1
-           .split_at(POST_ENTRY_SIZE * idx.num_post)
-           .0
+            .split_at(idx.post_index)
+            .1
+            .split_at(POST_ENTRY_SIZE * idx.num_post)
+            .0
     };
     for i in 0..idx.num_post {
         try!(writeln!(&mut std::io::stdout(),

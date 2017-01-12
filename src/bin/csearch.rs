@@ -130,65 +130,62 @@ fn main() {
     libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
 
     let matches = clap::App::new("csearch")
-                      .version(&crate_version!()[..])
-                      .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright \
-                               2011 the Go authors)")
-                      .about(ABOUT)
-                      .arg(clap::Arg::with_name("PATTERN")
-                               .help("a regular expression to search with")
-                               .required(true)
-                               .use_delimiter(false)
-                               .index(1))
-                      .arg(clap::Arg::with_name("count")
-                               .short("c")
-                               .long("count")
-                               .help("print only a count of matching lines per file"))
-                      .arg(clap::Arg::with_name("color")
-                               .long("color")
-                               .help("highlight matching strings")
-                               .overrides_with("nocolor")
-                               .hidden(!cfg!(feature = "color")))
-                      .arg(clap::Arg::with_name("nocolor")
-                               .long("nocolor")
-                               .help("don't highlight matching strings")
-                               .overrides_with("color")
-                               .hidden(!cfg!(feature = "color")))
-                      .arg(clap::Arg::with_name("FILE_PATTERN")
-                               .short("G")
-                               .long("file-search-regex")
-                               .help("limit search to filenames matching FILE_PATTERN")
-                               .takes_value(true))
-                      .arg(clap::Arg::with_name("ignore-case")
-                               .short("i")
-                               .long("ignore-case")
-                               .help("Match case insensitively"))
-                      .arg(clap::Arg::with_name("files-with-matches")
-                               .short("l")
-                               .long("files-with-matches")
-                               .help("Only print filenames that contain matches (don't print \
-                                      the matching lines)"))
-                      .arg(clap::Arg::with_name("line-number")
-                               .short("n")
-                               .long("line-number")
-                               .help("print line number with output lines"))
-                      .arg(clap::Arg::with_name("visual-studio-format")
-                               .long("format-vs")
-                               .help("print lines in a format that can be parsed by Visual \
-                                      Studio 2008"))
-                      .arg(clap::Arg::with_name("NUM")
-                               .short("m")
-                               .long("max-count")
-                               .takes_value(true)
-                               .help("stop after NUM matches"))
-                      .arg(clap::Arg::with_name("bruteforce")
-                               .long("brute")
-                               .help("brute force - search all files in the index"))
-                      .arg(clap::Arg::with_name("INDEX_FILE")
-                               .long("indexpath")
-                               .takes_value(true)
-                               .help("use specified INDEX_FILE as the index path. overrides \
-                                      $CSEARCHINDEX."))
-                      .get_matches();
+        .version(&crate_version!()[..])
+        .author("Vernon Jones <vernonrjones@gmail.com> (original code copyright 2011 the Go \
+                 authors)")
+        .about(ABOUT)
+        .arg(clap::Arg::with_name("PATTERN")
+            .help("a regular expression to search with")
+            .required(true)
+            .use_delimiter(false)
+            .index(1))
+        .arg(clap::Arg::with_name("count")
+            .short("c")
+            .long("count")
+            .help("print only a count of matching lines per file"))
+        .arg(clap::Arg::with_name("color")
+            .long("color")
+            .help("highlight matching strings")
+            .overrides_with("nocolor")
+            .hidden(!cfg!(feature = "color")))
+        .arg(clap::Arg::with_name("nocolor")
+            .long("nocolor")
+            .help("don't highlight matching strings")
+            .overrides_with("color")
+            .hidden(!cfg!(feature = "color")))
+        .arg(clap::Arg::with_name("FILE_PATTERN")
+            .short("G")
+            .long("file-search-regex")
+            .help("limit search to filenames matching FILE_PATTERN")
+            .takes_value(true))
+        .arg(clap::Arg::with_name("ignore-case")
+            .short("i")
+            .long("ignore-case")
+            .help("Match case insensitively"))
+        .arg(clap::Arg::with_name("files-with-matches")
+            .short("l")
+            .long("files-with-matches")
+            .help("Only print filenames that contain matches (don't print the matching lines)"))
+        .arg(clap::Arg::with_name("line-number")
+            .short("n")
+            .long("line-number")
+            .help("print line number with output lines"))
+        .arg(clap::Arg::with_name("visual-studio-format")
+            .long("format-vs")
+            .help("print lines in a format that can be parsed by Visual Studio 2008"))
+        .arg(clap::Arg::with_name("NUM")
+            .short("m")
+            .long("max-count")
+            .takes_value(true)
+            .help("stop after NUM matches"))
+        .arg(clap::Arg::with_name("bruteforce")
+            .long("brute")
+            .help("brute force - search all files in the index"))
+        .arg(clap::Arg::with_name("INDEX_FILE")
+            .long("indexpath")
+            .takes_value(true)
+            .help("use specified INDEX_FILE as the index path. overrides $CSEARCHINDEX."))
+        .get_matches();
 
     // possibly add ignore case flag to the pattern
     let ignore_case = matches.is_present("ignore-case");
@@ -197,11 +194,7 @@ fn main() {
     let pattern = {
         let user_pattern = matches.value_of("PATTERN").expect("Failed to get PATTERN");
 
-        let ignore_case_flag = if ignore_case {
-            "(?i)"
-        } else {
-            ""
-        };
+        let ignore_case_flag = if ignore_case { "(?i)" } else { "" };
         let multiline_flag = "(?m)";
         String::from(ignore_case_flag) + multiline_flag + user_pattern
     };
@@ -265,11 +258,11 @@ fn main() {
             Err(e) => panic!("FILE_PATTERN: {}", e),
         };
         post = post.into_iter()
-                   .filter(|file_id| {
-                       let name = index_reader.name(*file_id);
-                       file_pattern.is_match(&name)
-                   })
-                   .collect::<BTreeSet<_>>();
+            .filter(|file_id| {
+                let name = index_reader.name(*file_id);
+                file_pattern.is_match(&name)
+            })
+            .collect::<BTreeSet<_>>();
     }
 
     // Search all possibly matching files for matches, printing the matching lines
@@ -342,8 +335,8 @@ impl<'a> LinePrinter<'a> {
     fn increment_file_match<P: AsRef<Path>>(&mut self, filename: P) {
         if self.num_matches.contains_key(filename.as_ref()) {
             let mut n = self.num_matches
-                            .get_mut(filename.as_ref())
-                            .expect("expected filename key to exist");
+                .get_mut(filename.as_ref())
+                .expect("expected filename key to exist");
             *n += 1;
         } else {
             self.num_matches.insert(PathBuf::from(filename.as_ref()), 1);
@@ -366,8 +359,8 @@ impl<'a> LinePrinter<'a> {
     fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
         let mut out_line = String::new();
         let simplified_path = PathSimplifier::from(self.options).maybe_make_relative(filename);
-        let path_component = self.maybe_add_color(&format!("{}", simplified_path.display()),
-                                                  LinePart::Path);
+        let path_component =
+            self.maybe_add_color(&format!("{}", simplified_path.display()), LinePart::Path);
         out_line.push_str(&path_component);
         let start_sep = if self.options.print_format == PrintFormat::VisualStudio {
             "("
@@ -376,8 +369,8 @@ impl<'a> LinePrinter<'a> {
         };
         out_line.push_str(&self.maybe_add_color(start_sep, LinePart::Separator));
         if self.options.line_number {
-            let line_number = self.maybe_add_color(&(result.line_number + 1).to_string(),
-                                                   LinePart::LineNumber);
+            let line_number =
+                self.maybe_add_color(&(result.line_number + 1).to_string(), LinePart::LineNumber);
             out_line.push_str(&line_number);
             if self.options.print_format == PrintFormat::VisualStudio {
                 out_line.push_str(&self.maybe_add_color(")", LinePart::Separator));
@@ -416,8 +409,8 @@ impl PathSimplifier {
     fn maybe_make_relative<P: AsRef<Path>>(&self, p: P) -> PathBuf {
         if self.make_relative {
             PathBuf::from(p.as_ref()
-                           .strip_prefix(&env::current_dir().unwrap())
-                           .unwrap_or(p.as_ref()))
+                .strip_prefix(&env::current_dir().unwrap())
+                .unwrap_or(p.as_ref()))
         } else {
             PathBuf::from(p.as_ref())
         }

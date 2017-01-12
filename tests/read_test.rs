@@ -4,7 +4,7 @@ extern crate libcsearch;
 
 mod common;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use self::tempfile::NamedTempFile;
 use self::libcsearch::reader::{PostReader, IndexReader};
@@ -14,7 +14,7 @@ use common::{tri, build_index};
 macro_rules! set {
     ( $( $x:expr ),* ) => {
         {
-            let mut temp_set = HashSet::new();
+            let mut temp_set = BTreeSet::new();
             $(
                 temp_set.insert($x);
             )*
