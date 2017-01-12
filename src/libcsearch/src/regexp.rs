@@ -4,11 +4,12 @@
 // license that can be found in the LICENSE file.
 use std::char;
 use std::collections::BTreeSet;
+use std::iter::FromIterator;
 
-pub type StringSet = BTreeSet<String>;
+pub type StringSet = BTreeSet<Vec<u8>>;
 
 // use regex::Regex;
-use regex_syntax::{Expr, Repeater, CharClass, ClassRange};
+use regex_syntax::{Expr, Repeater, ByteClass, ClassRange, ByteRange};
 
 /// Operation on a Query
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -19,7 +20,7 @@ pub enum QueryOperation {
     Or,
 }
 
-pub type Trigram = String;
+pub type Trigram = Vec<u8>;
 
 /// A structure, similar to a regular expression, that uses
 /// composed trigrams to find matches in text.
@@ -39,7 +40,8 @@ impl Query {
             _ => ()
         }
         if self.sub.is_empty() && self.trigram.len() == 1 {
-            s.push_str(&format!("\"{}\"", self.trigram.iter().next().unwrap()));
+            let tri = self.trigram.iter().next().unwrap();
+            s.push_str(&format!("\"{}\"", String::from_utf8_lossy(&tri[..])));
             return s;
         }
         let (sjoin, tjoin) = match self.operation {
@@ -58,7 +60,7 @@ impl Query {
             if i > 0 {
                 s.push_str(tjoin);
             }
-            s.push_str(&format!("\"{}\"", t));
+            s.push_str(&format!("\"{}\"", String::from_utf8_lossy(&t[..])));
         }
         if !self.sub.is_empty() {
             if !self.trigram.is_empty() {
@@ -152,13 +154,14 @@ pub struct RegexInfo {
 }
 
 impl RegexInfo {
-    pub fn new(expr: Expr) -> Self {
-        let mut info = Self::analyze(expr);
+    pub fn new(expr: Expr) -> Result<Self, String> {
+        let mut info = Self::analyze(expr)?;
         info = simplify(info, true);
         add_exact(&mut info);
-        info
+        Ok(info)
     }
-    fn analyze(expr: Expr) -> Self {
+    fn analyze(expr: Expr) -> Result<Self, String> {
+        // println!("expr: {:?}", expr);
         match expr {
             Expr::Empty |
             Expr::StartLine |
@@ -166,34 +169,45 @@ impl RegexInfo {
             Expr::StartText |
             Expr::EndText |
             Expr::WordBoundary |
-            Expr::NotWordBoundary => Self::empty_string(),
-            Expr::Literal {chars, casei: true} => {
-                match chars.len() {
-                    0 => Self::empty_string(),
+            Expr::NotWordBoundary => Ok(Self::empty_string()),
+            Expr::WordBoundaryAscii |
+            Expr::NotWordBoundaryAscii => Ok(Self::empty_string()),
+            Expr::Literal {chars, casei } => {
+                Self::analyze(Expr::LiteralBytes {
+                    bytes: String::from_iter(chars.into_iter()).into_bytes(),
+                    casei: casei
+                })
+            }
+            Expr::LiteralBytes { bytes, casei: true } => {
+                match bytes.len() {
+                    0 => Ok(Self::empty_string()),
                     1 => {
-                        let re1 = Expr::Class(CharClass::new(vec![ClassRange {
-                                                                      start: chars[0],
-                                                                      end: chars[0],
+                        let re1 = Expr::ClassBytes(ByteClass::new(vec![ByteRange {
+                                                                      start: bytes[0],
+                                                                      end: bytes[0],
                                                                   }]).case_fold());
-                        RegexInfo::analyze(re1)
+                        Self::analyze(re1)
                     }
                     _ => {
                         // Multi-letter case-folded string:
                         // treat as concatenation of single-letter case-folded strings.
-                        chars.iter().fold(Self::empty_string(), |info, c| {
-                            concat(info,
-                                   Self::analyze(Expr::Literal {
-                                       chars: vec![*c],
-                                       casei: true,
-                                   }))
-                        })
+                        let folded = bytes
+                            .into_iter()
+                            .fold(Ok(Self::empty_string()), |info, c| {
+                                let analyzed = try!(Self::analyze(Expr::LiteralBytes {
+                                    bytes: vec![c],
+                                    casei: true
+                                }));
+                                info.map(|info| concat(info, analyzed))
+                            });
+                        folded
                     }
                 }
             }
-            Expr::Literal {chars, casei: false} => {
+            Expr::LiteralBytes { bytes, casei: false} => {
                 let exact_set = {
                     let mut h = StringSet::new();
-                    h.insert(chars.into_iter().collect());
+                    h.insert(bytes);
                     h
                 };
                 let r = RegexInfo {
@@ -203,48 +217,62 @@ impl RegexInfo {
                     suffix: StringSet::new(),
                     query: Query::all()
                 };
-                simplify(r, false)
+                Ok(simplify(r, false))
             }
-            Expr::AnyChar | Expr::AnyCharNoNL => Self::any_char(),
+            Expr::AnyChar | Expr::AnyCharNoNL => Ok(Self::any_char()),
+            Expr::AnyByte | Expr::AnyByteNoNL => Ok(Self::any_char()),
             Expr::Concat(exprs) => {
-                if exprs.is_empty() {
-                    return Self::empty_string();
-                }
-                let mut exprs_it = exprs.into_iter().map(RegexInfo::analyze);
-                let first = exprs_it.next().unwrap();
-                exprs_it.fold(first, concat)
+                let mut exprs = exprs.into_iter().map(Self::analyze);
+                let first = match exprs.next() {
+                    Some(ex) => ex,
+                    None => return Ok(Self::empty_string()),
+                };
+                exprs.fold(first, |a, b| {
+                    match (a, b) {
+                        (Ok(a), Ok(b)) => Ok(concat(a, b)),
+                        (Err(e), _) | (_, Err(e)) => Err(e)
+                    }
+                })
             }
             Expr::Alternate(v) => {
-                if v.is_empty() {
-                    return Self::no_match();
-                }
-                let mut analyzed = v.into_iter().map(RegexInfo::analyze);
-                let first = analyzed.next().unwrap();
-                analyzed.fold(first, alternate)
+                let mut v = v.into_iter().map(Self::analyze);
+                let first = match v.next() {
+                    Some(f) => f,
+                    None => return Ok(Self::no_match())
+                };
+                v.fold(first, |a, b| {
+                    match (a, b) {
+                        (Ok(a), Ok(b)) => Ok(alternate(a, b)),
+                        (Err(e), _) | (_, Err(e)) => Err(e)
+                    }
+                })
             }
             Expr::Repeat {e, r, /* ref greedy */ .. } => {
                 match r {
-                    Repeater::ZeroOrOne => alternate(RegexInfo::analyze(*e), Self::empty_string()),
+                    Repeater::ZeroOrOne => {
+                        let e = Self::analyze(*e)?;
+                        Ok(alternate(e, Self::empty_string()))
+                    },
                     Repeater::ZeroOrMore | Repeater::Range {..} => {
                         // We don't know anything, so assume the worst.
-                        Self::any_match()
+                        Ok(Self::any_match())
                     },
                     Repeater::OneOrMore => {
                         // x+
                         // Since there has to be at least one x, the prefixes and suffixes
                         // stay the same.  If x was exact, it isn't anymore.
 
-                        let mut info = RegexInfo::analyze(*e);
+                        let mut info = Self::analyze(*e)?;
                         if let Some(i_s) = info.exact_set {
                             info.prefix = i_s.clone();
                             info.suffix = i_s;
                             info.exact_set = None;
                         }
-                        simplify(info, false)
+                        Ok(simplify(info, false))
                     },
                 }
             }
-            Expr::Class(ref ranges) if ranges.is_empty() => Self::no_match(),
+            Expr::Class(ref ranges) if ranges.is_empty() => Ok(Self::no_match()),
             Expr::Class(ref ranges) => {
                 let mut info = RegexInfo {
                     can_empty: false,
@@ -256,16 +284,20 @@ impl RegexInfo {
                 for each_range in ranges {
                     let &ClassRange { start, end } = each_range;
                     // if the class is too large, it's okay to overestimate
-                    if (end as u32 - start as u32) > 100 {
-                        return Self::any_char();
+                    match (end as u32).checked_sub(start as u32) {
+                        Some(x) if x > 100 => return Ok(Self::any_char()),
+                        Some(_) => (),
+                        None => {
+                            return Err(format!("range not in ascending order ({}..{})",
+                                               start, end));
+                        }
                     }
                     let next_range: StringSet = {
                         let mut h = StringSet::new();
-                        let it = CharRangeIter::new(start, end).expect("expected valid range");
-                        for chr in it {
+                        for chr in CharRangeIter::new(start, end)? {
                             let mut s = String::new();
                             s.push(chr);
-                            h.insert(s);
+                            h.insert(s.into_bytes());
                         }
                         h
                     };
@@ -275,10 +307,45 @@ impl RegexInfo {
                         info.exact_set = Some(next_range);
                     }
                 }
-                simplify(info, false)
+                Ok(simplify(info, false))
+            },
+            Expr::ClassBytes(ref ranges) if ranges.is_empty() => Ok(Self::no_match()),
+            Expr::ClassBytes(ref ranges) => {
+                let mut info = RegexInfo {
+                    can_empty: false,
+                    exact_set: None,
+                    prefix: StringSet::new(),
+                    suffix: StringSet::new(),
+                    query: Query::all(),
+                };
+                for each_range in ranges {
+                    let &ByteRange { start, end } = each_range;
+                    // if the class is too large, it's okay to overestimate
+                    match end.checked_sub(start) {
+                        Some(x) if x > 100 => return Ok(Self::any_char()),
+                        Some(_) => (),
+                        None => {
+                            return Err(format!("range not in ascending order ({}..{})",
+                                               start, end));
+                        }
+                    }
+                    let next_range: StringSet = {
+                        let mut h = StringSet::new();
+                        for chr in start..end+1 {
+                            h.insert(vec![chr]);
+                        }
+                        h
+                    };
+                    if let Some(ref mut exact) = info.exact_set {
+                        *exact = union(&exact, &next_range);
+                    } else {
+                        info.exact_set = Some(next_range);
+                    }
+                }
+                Ok(simplify(info, false))
             },
             Expr::Group { e, .. } => {
-                RegexInfo::analyze(*e)
+                Self::analyze(*e)
             },
         }
     }
@@ -320,7 +387,7 @@ impl RegexInfo {
     }
     fn hashset_with_only_emptystring() -> StringSet {
         let mut h = StringSet::new();
-        h.insert("".to_string());
+        h.insert(Vec::new());
         h
     }
     pub fn format_as_string(&self) -> String {
@@ -330,12 +397,18 @@ impl RegexInfo {
         }
         if let Some(ref exact) = self.exact_set {
             s.push_str("exact: ");
-            s.push_str(&(&exact.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+            let as_vec: Vec<&[u8]> = exact.iter().map(|v| v as &[u8]).collect();
+            let flattened: Vec<u8> = as_vec.join(&b',');
+            s.push_str(&*String::from_utf8_lossy(&flattened));
         } else {
             s.push_str("prefix: ");
-            s.push_str(&(&self.prefix.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+            let as_vec: Vec<&[u8]> = self.prefix.iter().map(|v| v as &[u8]).collect();
+            let flattened: Vec<u8> = as_vec.join(&b',');
+            s.push_str(&*String::from_utf8_lossy(&flattened));
             s.push_str(" suffix: ");
-            s.push_str(&(&self.suffix.iter().cloned().collect::<Vec<_>>()[..]).join(","));
+            let as_vec: Vec<&[u8]> = self.suffix.iter().map(|v| v as &[u8]).collect();
+            let flattened: Vec<u8> = as_vec.join(&b',');
+            s.push_str(&*String::from_utf8_lossy(&flattened));
         }
         s.push_str(&format!(" match: {}", self.query.format_as_string()));
         s
@@ -348,7 +421,7 @@ fn concat(x: RegexInfo, y: RegexInfo) -> RegexInfo {
     xy.query = x.query.and(y.query);
 
     if let (&Some(ref x_s), &Some(ref y_s)) = (&x.exact_set, &y.exact_set) {
-        xy.exact_set = Some(cross_product(&x_s, &y_s));
+        xy.exact_set = Some(cross_product(x_s, y_s));
     } else {
         if let &Some(ref x_s) = &x.exact_set {
             xy.prefix = cross_product(&x_s, &y.prefix);
@@ -428,6 +501,7 @@ fn add_exact(x: &mut RegexInfo) {
 }
 
 fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
+    // println!("simplify {:?}: {}", info, info.format_as_string());
     let do_simplify = if let Some(ref exact) = info.exact_set {
         exact.len() > 7 
             || (min_string_len(&exact) >= 3 && force)
@@ -452,8 +526,8 @@ fn simplify(mut info: RegexInfo, force: bool) -> RegexInfo {
                     info.prefix.insert(s.clone());
                     info.suffix.insert(s.clone());
                 } else {
-                    let first_three_chars = s.chars().take(2).collect();
-                    let rest = s.chars().skip(n-2).collect();
+                    let first_three_chars = s.iter().take(2).cloned().collect();
+                    let rest = s.iter().skip(n-2).cloned().collect();
                     info.prefix.insert(first_three_chars);
                     info.suffix.insert(rest);
                 }
@@ -480,9 +554,9 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
             let mut s = string.clone();
             if s.len() >= n {
                 s = if !is_suffix {
-                    s.chars().take(n-1).collect()
+                    s.iter().take(n-1).cloned().collect()
                 } else {
-                    s.chars().skip(s.len()-n+1).collect()
+                    s.iter().skip(s.len()-n+1).cloned().collect()
                 };
             }
             t.insert(s);
@@ -495,7 +569,7 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
     // doesn't help at all to know that  "abc" is also a possible
     // prefix, so delete "abc".
 
-    let f = |a: &str, b: &str| {
+    let f = |a: &[u8], b: &[u8]| {
         if is_suffix {
             a.starts_with(b)
         } else {
@@ -503,7 +577,7 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
         }
     };
     let mut u = StringSet::new();
-    let mut last: Option<String> = None;
+    let mut last: Option<Vec<u8>> = None;
     for s in prefix_or_suffix.iter() {
         if u.is_empty() || !f(&s, &last.as_ref().unwrap()) {
             u.insert(s.clone());
@@ -517,16 +591,16 @@ fn simplify_set(mut q: Query, prefix_or_suffix: &mut StringSet, is_suffix: bool)
 
 /// Returns the length of the shortest string in xs
 fn min_string_len(xs: &StringSet) -> usize {
-    xs.iter().map(String::len).min().unwrap_or(0)
+    xs.iter().map(Vec::len).min().unwrap_or(0)
 }
 
 /// Returns the cross product of s and t
-fn cross_product(s: &BTreeSet<Trigram>, t: &BTreeSet<Trigram>) -> BTreeSet<Trigram> {
-    let mut p = BTreeSet::new();
-    for s_string in s {
-        for t_string in t {
-            let mut cross_string = s_string.clone();
-            cross_string.push_str(&t_string);
+fn cross_product(s: &StringSet, t: &StringSet) -> StringSet {
+    let mut p = StringSet::new();
+    for s_tri in s {
+        for t_tri in t {
+            let mut cross_string = s_tri.clone();
+            cross_string.extend(t_tri);
             p.insert(cross_string);
         }
     }
@@ -569,7 +643,7 @@ fn and_trigrams(q: Query, t: &BTreeSet<Trigram>) -> Query {
         // NOTE: the .windows() slice method would be better here,
         //       but it doesn't seem to be available for chars
         for i in 0..(t_string.len() - 2) {
-            trigram.insert(t_string[i..i + 3].to_string());
+            trigram.insert(Vec::from(&t_string[i..i + 3]));
         }
         or.or(Query {
             operation: QueryOperation::And,
@@ -679,13 +753,13 @@ struct CharRangeIter {
 }
 
 impl CharRangeIter {
-    fn new(low: char, high: char) -> Option<Self> {
+    fn new(low: char, high: char) -> Result<Self, String> {
         if (low as u32) > (high as u32) {
-            None
+            Err(format!("start ({}) > end ({})", low, high))
         } else if low > char::MAX || high > char::MAX {
-            None
+            Err(format!("low or high > char::MAX"))
         } else {
-            Some(CharRangeIter {
+            Ok(CharRangeIter {
                 low: low,
                 high: high,
                 position: low,

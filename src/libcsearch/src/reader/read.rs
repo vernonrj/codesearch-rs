@@ -205,8 +205,7 @@ impl IndexReader {
                 let mut trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
-                        let b = t.as_bytes();
-                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                        (t[0] as u32) << 16 | (t[1] as u32) << 8 | (t[2] as u32)
                     });
                 let post_set = if let Some(i) = trigram_it.next() {
                     let s = PostSet::new(self).or(i).unwrap_or(PostSet::new(self));
@@ -224,8 +223,7 @@ impl IndexReader {
                 let trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
-                        let b = t.as_bytes();
-                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                        (t[0] as u32) << 16 | (t[1] as u32) << 8 | (t[2] as u32)
                     });
                 let post_set = trigram_it.fold(PostSet::new(self), |a, b| {
                     a.or(b).unwrap_or(PostSet::new(self))
@@ -243,8 +241,7 @@ impl IndexReader {
                 let mut trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
-                        let b = t.as_bytes();
-                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                        (t[0] as u32) << 16 | (t[1] as u32) << 8 | (t[2] as u32)
                     });
                 let post_set = if let Some(i) = trigram_it.next() {
                     let s = state.and(i).unwrap_or(PostSet::new(self));
@@ -260,8 +257,7 @@ impl IndexReader {
                 let trigram_it = query.trigram
                     .into_iter()
                     .map(|t| {
-                        let b = t.as_bytes();
-                        (b[0] as u32) << 16 | (b[1] as u32) << 8 | (b[2] as u32)
+                        (t[0] as u32) << 16 | (t[1] as u32) << 8 | (t[2] as u32)
                     });
                 let post_set = trigram_it.fold(state, |a, b| {
                     a.or(b).unwrap_or(PostSet::new(self))

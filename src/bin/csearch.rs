@@ -250,11 +250,13 @@ fn main() {
         index_reader.query(Query::all()).into_inner()
     } else {
         // Get the pseudo-regexp (built using trigrams)
-        let expr = regex_syntax::Expr::parse(&pattern).unwrap();
-        let q = RegexInfo::new(expr).query;
+        let expr = regex_syntax::ExprBuilder::new().unicode(false).parse(&pattern).unwrap();
+        let q = RegexInfo::new(expr).unwrap().query;
+        // println!("query = {}", q.format_as_string());
 
         index_reader.query(q).into_inner()
     };
+    // println!("identified {} possible queries", post.len());
 
     // If provided, filter possibly matching files via FILE_PATTERN
     if let Some(ref file_pattern_str) = matches.value_of("FILE_PATTERN") {
