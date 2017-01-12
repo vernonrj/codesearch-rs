@@ -4,28 +4,36 @@
 // license that can be found in the LICENSE file.
 
 
+extern crate bytecount;
 #[macro_use]
 extern crate clap;
+extern crate grep;
 #[macro_use]
 extern crate log;
+extern crate libc;
+extern crate memchr;
 extern crate regex;
 extern crate regex_syntax;
+extern crate termcolor;
 
 extern crate consts;
 extern crate libcustomlogger;
 extern crate libcsearch;
 extern crate libvarint;
 
-use libcsearch::grep;
 use libcsearch::reader::IndexReader;
 use libcsearch::regexp::{RegexInfo, Query};
 
-use std::io::{self, Write};
-use std::collections::{HashMap, BTreeSet};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::collections::BTreeSet;
 use std::env;
 use std::path::{Path, PathBuf};
 
+use grep::{GrepBuilder, Grep};
+use regex::bytes;
 use regex::Regex;
+use termcolor::{Color, ColorChoice, ColorSpec, Stdout, WriteColor};
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -72,59 +80,26 @@ empty, $HOME/.csearchindex.
 ";
 
 
-#[cfg(feature = "color")]
-mod color {
-    extern crate libc;
-    extern crate ansi_term;
-    use self::ansi_term::Colour;
-    use super::LinePart;
+#[cfg(windows)]
+const STDOUT_FILENO: i32 = 1;
+#[cfg(not(windows))]
+const STDOUT_FILENO: i32 = libc::STDOUT_FILENO as i32;
 
-    use std::env;
-
-    #[cfg(windows)]
-    const STDOUT_FILENO: i32 = 1;
-    #[cfg(not(windows))]
-    const STDOUT_FILENO: i32 = libc::STDOUT_FILENO as i32;
-
-    pub fn is_color_output_available() -> bool {
-        let isatty = unsafe { libc::isatty(STDOUT_FILENO) != 0 };
-        if !isatty {
-            return false;
-        }
-        let t = if let Ok(term) = env::var("TERM") {
-            term
-        } else {
-            return false;
-        };
-        if t == "dumb" {
-            return false;
-        }
-        return true;
+pub fn is_color_output_available() -> bool {
+    let isatty = unsafe { libc::isatty(STDOUT_FILENO) != 0 };
+    if !isatty {
+        return false;
     }
-
-    pub fn add_color(text: &str, component: LinePart) -> String {
-        match component {
-            LinePart::Path => Colour::Purple.paint(text).to_string(),
-            LinePart::LineNumber => Colour::Green.paint(text).to_string(),
-            LinePart::Match => Colour::Green.bold().paint(text).to_string(),
-            LinePart::Separator => Colour::Cyan.paint(text).to_string(),
-        }
+    let t = if let Ok(term) = env::var("TERM") {
+        term
+    } else {
+        return false;
+    };
+    if t == "dumb" {
+        return false;
     }
+    return true;
 }
-
-#[cfg(not(feature = "color"))]
-mod color {
-    use super::LinePart;
-    pub fn is_color_output_available() -> bool {
-        false
-    }
-    pub fn add_color(text: &str, _: LinePart) -> String {
-        text.to_string()
-    }
-}
-
-pub use color::{is_color_output_available, add_color};
-
 
 fn main() {
     libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
@@ -265,135 +240,96 @@ fn main() {
             .collect::<BTreeSet<_>>();
     }
 
-    // Search all possibly matching files for matches, printing the matching lines
-    let g = grep::Grep::new(match_options.pattern.clone());
-    let max_count = match_options.max_count.clone();
-    let mut line_printer = LinePrinter::new(&match_options);
-    let mut total_matches = 0;
-    'files: for file_id in post {
+    // writeln!(io::stderr(), "searching").unwrap();
+    let mut buffer = vec![0; 4096];
+    let path_simplifier = PathSimplifier::from(&match_options);
+    let g: Grep = GrepBuilder::new(&match_options.pattern.as_str()).build().unwrap();
+    let matcher = bytes::Regex::new(&match_options.pattern.as_str()).unwrap();
+    for file_id in post {
+        // println!("next file");
+        buffer.clear();
         let name = index_reader.name(file_id);
-        let g_it = match g.open(name.clone()) {
-            Ok(g_it) => g_it,
+        // writeln!(io::stderr(), "searching {}", name).unwrap();
+        let mut reader = match File::open(&name) {
+            Ok(r) => r,
             Err(cause) => {
                 warn!("{} - File open failure: {}", name, cause);
                 continue;
             }
         };
-        for each_line in g_it {
-            total_matches += 1;
-            if let Some(ref m) = max_count {
-                if *m != 0 && total_matches > *m {
-                    break 'files;
+        let name = path_simplifier.maybe_make_relative(name);
+        match reader.read_to_end(&mut buffer) {
+            Ok(_) => (),
+            Err(_) => continue,
+        }
+        let mut line_count = 0;
+        let mut stdout = if match_options.with_color {
+            Stdout::new(ColorChoice::Auto)
+        } else {
+            Stdout::new(ColorChoice::Never)
+        };
+
+        let mut last_line_end = 0;
+        if match_options.print_count {
+            let count = g.iter(&buffer).count();
+            if count != 0 {
+                writeln!(&mut stdout, "{}:{}", name.display(), count).unwrap();
+            }
+            continue;
+        }
+        for each_match in g.iter(&buffer) {
+            if match_options.files_with_matches_only {
+                writeln!(&mut stdout, "{}", name.display()).unwrap();
+                break;
+            }
+            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+            write!(&mut stdout, "{}", name.display()).unwrap();
+            stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+            if match_options.print_format == PrintFormat::VisualStudio {
+                write!(&mut stdout, "(").unwrap();
+            } else {
+                write!(&mut stdout, ":").unwrap();
+            }
+            if match_options.line_number && last_line_end != each_match.end() {
+                let num_lines = bytecount::count(&buffer[last_line_end..each_match.start()], b'\n');
+                line_count += num_lines + 1;
+                last_line_end = each_match.end();
+                let line_number = line_count.to_string();
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+                stdout.write(&line_number.as_bytes()).unwrap();
+                stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                if match_options.print_format == PrintFormat::VisualStudio {
+                    write!(&mut stdout, ")").unwrap();
                 }
+                write!(&mut stdout, ":").unwrap();
             }
-            match line_printer.print_line(&name, &each_line) {
-                Ok(_) => (),
-                Err(_) => return,    // return early if stdout is closed
+            let line = &buffer[each_match.start()..each_match.end()];
+            if match_options.with_color {
+                let mut start_from = 0;
+                for m in matcher.find_iter(&line) {
+                    let to_write = &line[start_from..m.start()];
+                    stdout.write(&to_write).unwrap();
+                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+                    let to_write = &line[m.start()..m.end()];
+                    stdout.write(&to_write).unwrap();
+                    stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                    start_from = m.end();
+                }
+                if start_from != line.len() {
+                    let to_write = &line[start_from..];
+                    stdout.write(&to_write).unwrap();
+                }
+            } else {
+                stdout.write(&line).unwrap();
             }
-        }
-    }
-    let path_simp = PathSimplifier::from(&match_options);
-    if match_options.print_count {
-        let mut kv: Vec<_> = line_printer.num_matches.iter().collect();
-        kv.sort();
-        for (k, v) in kv {
-            println!("{}: {}", path_simp.maybe_make_relative(k).display(), v);
-        }
-    } else if match_options.files_with_matches_only {
-        let mut v: Vec<_> = line_printer.num_matches.keys().collect();
-        v.sort();
-        for k in v {
-            println!("{}", path_simp.maybe_make_relative(k).display());
+            if line.last() != Some(&b'\n') {
+                stdout.write(&[b'\n']).unwrap();
+            }
         }
     }
 
 }
 
-struct LinePrinter<'a> {
-    options: &'a MatchOptions,
-    num_matches: HashMap<PathBuf, usize>,
-}
-
-
-impl<'a> LinePrinter<'a> {
-    fn new(options: &'a MatchOptions) -> Self {
-        LinePrinter {
-            options: options,
-            num_matches: HashMap::new(),
-        }
-    }
-    fn all_lines_printed(&self) -> bool {
-        if self.options.print_count || self.options.files_with_matches_only {
-            false
-        } else {
-            true
-        }
-    }
-    fn only_filenames_printed(&self) -> bool {
-        self.options.files_with_matches_only
-    }
-    fn increment_file_match<P: AsRef<Path>>(&mut self, filename: P) {
-        if self.num_matches.contains_key(filename.as_ref()) {
-            let mut n = self.num_matches
-                .get_mut(filename.as_ref())
-                .expect("expected filename key to exist");
-            *n += 1;
-        } else {
-            self.num_matches.insert(PathBuf::from(filename.as_ref()), 1);
-        }
-    }
-    fn print_line<P: AsRef<Path>>(&mut self,
-                                  filename: P,
-                                  result: &grep::MatchResult)
-                                  -> io::Result<()> {
-        self.increment_file_match(filename.as_ref());
-        if self.all_lines_printed() {
-            let out_line = self.format_line(filename, result);
-            writeln!(&mut std::io::stdout(), "{}", out_line)
-        } else if self.only_filenames_printed() {
-            return Ok(());
-        } else {
-            return Ok(());
-        }
-    }
-    fn format_line<P: AsRef<Path>>(&self, filename: P, result: &grep::MatchResult) -> String {
-        let mut out_line = String::new();
-        let simplified_path = PathSimplifier::from(self.options).maybe_make_relative(filename);
-        let path_component =
-            self.maybe_add_color(&format!("{}", simplified_path.display()), LinePart::Path);
-        out_line.push_str(&path_component);
-        let start_sep = if self.options.print_format == PrintFormat::VisualStudio {
-            "("
-        } else {
-            ":"
-        };
-        out_line.push_str(&self.maybe_add_color(start_sep, LinePart::Separator));
-        if self.options.line_number {
-            let line_number =
-                self.maybe_add_color(&(result.line_number + 1).to_string(), LinePart::LineNumber);
-            out_line.push_str(&line_number);
-            if self.options.print_format == PrintFormat::VisualStudio {
-                out_line.push_str(&self.maybe_add_color(")", LinePart::Separator));
-            }
-            out_line.push_str(&self.maybe_add_color(":", LinePart::Separator));
-        }
-        let line = {
-            let (start, end) = self.options.pattern.find(&result.line).unwrap();
-            String::from(&result.line[0..start]) +
-            &self.maybe_add_color(&result.line[start..end], LinePart::Match) +
-            &result.line[end..]
-        };
-        out_line.push_str(&line);
-        out_line
-    }
-    fn maybe_add_color(&self, text: &str, component: LinePart) -> String {
-        if self.options.with_color {
-            add_color(text, component)
-        } else {
-            text.to_string()
-        }
-    }
-}
 
 struct PathSimplifier {
     make_relative: bool,

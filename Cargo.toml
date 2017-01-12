@@ -9,11 +9,14 @@ homepage = "https://github.com/vernonrj/codesearch-rs"
 repository = "https://github.com/vernonrj/codesearch-rs"
 
 [dependencies]
-ansi_term = { version = "0.7", optional = true }
+termcolor = "0.1"
 libc = "0.2"
 clap = "2.1"
+grep = "0.1"
 glob = "0.2"
-regex = "0.1"
+memchr = "1.0"
+bytecount = "0.1"
+regex = "0.2"
 regex-syntax = "0.4"
 log = "0.3"
 tempfile = "1.1"
@@ -27,8 +30,9 @@ libprofiling = { path = "src/libprofiling" }
 libvarint = { path = "src/libvarint" }
 
 [features]
-default = ["color"]
+default = ["simd-accel"]
 profile = []
-color = ["ansi_term"]
+avx-accel = ["bytecount/avx-accel"]
+simd-accel = ["bytecount/simd-accel"]
 
 
