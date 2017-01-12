@@ -7,7 +7,7 @@ authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 byteorder = "0.4"
 memmap = "0.2"
 num = "0.1"
-regex = "0.1"
+regex = "0.2"
 regex-syntax = "0.4"
 
 consts = { path = "../consts" }

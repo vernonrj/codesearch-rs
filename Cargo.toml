@@ -1,6 +1,6 @@
 [package]
 name = "codesearch-rs"
-version = "0.5.2"
+version = "0.6.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 license = "BSD-3-Clause"
 description = "Tool for indexing then performing regular expression searches over large bodies of code"
