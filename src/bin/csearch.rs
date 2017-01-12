@@ -52,7 +52,7 @@ pub enum LinePart {
 
 #[derive(Debug)]
 pub struct MatchOptions {
-    pub pattern: Regex,
+    pub pattern: String,
     pub print_format: PrintFormat,
     pub print_count: bool,
     pub ignore_case: bool,
@@ -101,7 +101,7 @@ pub fn is_color_output_available() -> bool {
     return true;
 }
 
-fn main() {
+pub fn main() {
     libcustomlogger::init(log::LogLevelFilter::Info).unwrap();
 
     let matches = clap::App::new("csearch")
@@ -166,17 +166,7 @@ fn main() {
     let ignore_case = matches.is_present("ignore-case");
 
     // get the pattern provided by the user
-    let pattern = {
-        let user_pattern = matches.value_of("PATTERN").expect("Failed to get PATTERN");
-
-        let ignore_case_flag = if ignore_case { "(?i)" } else { "" };
-        let multiline_flag = "(?m)";
-        String::from(ignore_case_flag) + multiline_flag + user_pattern
-    };
-    let regex_pattern = match Regex::new(&pattern) {
-        Ok(r) => r,
-        Err(e) => panic!("PATTERN: {}", e),
-    };
+    let pattern = matches.value_of("PATTERN").expect("Failed to get PATTERN");
 
     // possibly override the csearchindex
     matches.value_of("INDEX_FILE").map(|p| {
@@ -185,7 +175,7 @@ fn main() {
 
     // combine cmdline options used for matching/output into a structure
     let match_options = MatchOptions {
-        pattern: regex_pattern,
+        pattern: pattern.to_string(),
         print_format: if matches.is_present("visual-studio-format") {
             PrintFormat::VisualStudio
         } else {
@@ -218,7 +208,11 @@ fn main() {
         index_reader.query(Query::all()).into_inner()
     } else {
         // Get the pseudo-regexp (built using trigrams)
-        let expr = regex_syntax::ExprBuilder::new().unicode(false).parse(&pattern).unwrap();
+        let expr = regex_syntax::ExprBuilder::new()
+            .unicode(false)
+            .case_insensitive(matches.is_present("ignore-case"))
+            .parse(&pattern)
+            .unwrap();
         let q = RegexInfo::new(expr).unwrap().query;
         // panic!("query = {} --- {:?}", q.format_as_string(), q);
 
@@ -243,8 +237,11 @@ fn main() {
     // writeln!(io::stderr(), "searching").unwrap();
     let mut buffer = vec![0; 4096];
     let path_simplifier = PathSimplifier::from(&match_options);
-    let g: Grep = GrepBuilder::new(&match_options.pattern.as_str()).build().unwrap();
-    let matcher = bytes::Regex::new(&match_options.pattern.as_str()).unwrap();
+    let g: Grep = GrepBuilder::new(&match_options.pattern)
+        .case_insensitive(match_options.ignore_case)
+        .build()
+        .unwrap();
+    let matcher = bytes::Regex::new(&match_options.pattern).unwrap();
     for file_id in post {
         // println!("next file");
         buffer.clear();
