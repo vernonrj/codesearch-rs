@@ -340,24 +340,25 @@ pub fn main() {
                     let mut start_from = 0;
                     for m in matcher.find_iter(&line) {
                         let to_write = &line[start_from..m.start()];
-                        stdout.write(&to_write).unwrap();
+                        write!(&mut stdout, "{}", String::from_utf8_lossy(&to_write)).unwrap();
                         stdout.set_color(ColorSpec::new().set_bold(true).set_fg(Some(Color::Red)))
                             .unwrap();
                         let to_write = &line[m.start()..m.end()];
-                        stdout.write(&to_write).unwrap();
+                        write!(&mut stdout, "{}", String::from_utf8_lossy(&to_write)).unwrap();
                         stdout.reset().unwrap();
                         start_from = m.end();
                     }
                     if start_from != line.len() {
-                        let to_write = &line[start_from..];
-                        stdout.write(&to_write).unwrap();
+                        let to_write = String::from_utf8_lossy(&line[start_from..]);
+                        write!(&mut stdout, "{}", to_write).unwrap();
                     }
                 } else {
-                    stdout.write(&line).unwrap();
+                    write!(&mut stdout, "{}", String::from_utf8_lossy(&line)).unwrap()
                 }
                 if line.last() != Some(&b'\n') {
                     stdout.write(&[b'\n']).unwrap();
                 }
+                stdout.flush().unwrap();
             }
             if !found_match && match_options.line_number {
                 let num_lines = bytecount::count(&buffer[..last_newline], b'\n');
