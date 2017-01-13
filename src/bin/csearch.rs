@@ -137,6 +137,10 @@ pub fn main() {
             .short("i")
             .long("ignore-case")
             .help("Match case insensitively"))
+        .arg(clap::Arg::with_name("files")
+            .long("files")
+            .help("Print each file that would be searched without actually performing the \
+                   search."))
         .arg(clap::Arg::with_name("files-with-matches")
             .short("l")
             .long("files-with-matches")
@@ -234,17 +238,37 @@ pub fn main() {
             .collect::<BTreeSet<_>>();
     }
 
-    // writeln!(io::stderr(), "searching").unwrap();
-    let mut buffer = vec![0; 4096];
     let path_simplifier = PathSimplifier::from(&match_options);
+    if matches.is_present("files") {
+        for file_id in post {
+            let name = index_reader.name(file_id);
+            let name = path_simplifier.maybe_make_relative(name);
+            println!("{}", name.display());
+        }
+        std::process::exit(0);
+    }
+
+    // writeln!(io::stderr(), "searching").unwrap();
+    let normal_alloc_size = 4096;
+    let mut buffer = vec![0; normal_alloc_size];
     let g: Grep = GrepBuilder::new(&match_options.pattern)
         .case_insensitive(match_options.ignore_case)
         .build()
         .unwrap();
-    let matcher = bytes::Regex::new(&match_options.pattern).unwrap();
+    let matcher = bytes::RegexBuilder::new(&match_options.pattern)
+        .case_insensitive(matches.is_present("ignore-case"))
+        .multi_line(false)
+        .build()
+        .unwrap();
+    let mut stdout = if match_options.with_color {
+        Stdout::new(ColorChoice::Auto)
+    } else {
+        Stdout::new(ColorChoice::Never)
+    };
+    let mut tmp = Vec::new();
     for file_id in post {
         // println!("next file");
-        buffer.clear();
+        buffer.resize(normal_alloc_size, 0);
         let name = index_reader.name(file_id);
         // writeln!(io::stderr(), "searching {}", name).unwrap();
         let mut reader = match File::open(&name) {
@@ -255,73 +279,93 @@ pub fn main() {
             }
         };
         let name = path_simplifier.maybe_make_relative(name);
-        match reader.read_to_end(&mut buffer) {
-            Ok(_) => (),
-            Err(_) => continue,
-        }
+        let mut trailing_bytes = 0;
         let mut line_count = 0;
-        let mut stdout = if match_options.with_color {
-            Stdout::new(ColorChoice::Auto)
-        } else {
-            Stdout::new(ColorChoice::Never)
-        };
-
-        let mut last_line_end = 0;
-        if match_options.print_count {
-            let count = g.iter(&buffer).count();
-            if count != 0 {
-                writeln!(&mut stdout, "{}:{}", name.display(), count).unwrap();
-            }
-            continue;
-        }
-        for each_match in g.iter(&buffer) {
-            if match_options.files_with_matches_only {
-                writeln!(&mut stdout, "{}", name.display()).unwrap();
+        let mut num_matches = 0;
+        'file: while let Ok(bytes_read) = reader.read(&mut buffer[trailing_bytes..]) {
+            if bytes_read == 0 && trailing_bytes == 0 {
                 break;
             }
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-            write!(&mut stdout, "{}", name.display()).unwrap();
-            stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
-            if match_options.print_format == PrintFormat::VisualStudio {
-                write!(&mut stdout, "(").unwrap();
-            } else {
-                write!(&mut stdout, ":").unwrap();
+            let total_bytes = bytes_read + trailing_bytes;
+            let mut last_line_end = 0;
+            if match_options.print_count {
+                num_matches += g.iter(&buffer).count();
+                continue;
             }
-            if match_options.line_number && last_line_end != each_match.end() {
-                let num_lines = bytecount::count(&buffer[last_line_end..each_match.start()], b'\n');
-                line_count += num_lines + 1;
-                last_line_end = each_match.end();
-                let line_number = line_count.to_string();
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                stdout.write(&line_number.as_bytes()).unwrap();
+            let last_newline = memchr::memrchr(b'\n', &buffer[..total_bytes]);
+            let last_newline = match last_newline {
+                Some(nl) => nl + 1,
+                None if bytes_read == 0 => total_bytes,
+                None => {
+                    // try to process an entire line
+                    trailing_bytes = total_bytes;
+                    buffer.resize(trailing_bytes + normal_alloc_size, 0);
+                    continue;
+                }
+            };
+            trailing_bytes = total_bytes - last_newline;
+            let mut found_match = false;
+            for each_match in g.iter(&buffer[..last_newline]) {
+                found_match = true;
+                if match_options.files_with_matches_only {
+                    writeln!(&mut stdout, "{}", name.display()).unwrap();
+                    break 'file;
+                }
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+                write!(&mut stdout, "{}", name.display()).unwrap();
                 stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
                 if match_options.print_format == PrintFormat::VisualStudio {
-                    write!(&mut stdout, ")").unwrap();
+                    write!(&mut stdout, "(").unwrap();
+                } else {
+                    write!(&mut stdout, ":").unwrap();
                 }
-                write!(&mut stdout, ":").unwrap();
-            }
-            let line = &buffer[each_match.start()..each_match.end()];
-            if match_options.with_color {
-                let mut start_from = 0;
-                for m in matcher.find_iter(&line) {
-                    let to_write = &line[start_from..m.start()];
-                    stdout.write(&to_write).unwrap();
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                    let to_write = &line[m.start()..m.end()];
-                    stdout.write(&to_write).unwrap();
+                if match_options.line_number && last_line_end != each_match.end() {
+                    let num_lines = bytecount::count(&buffer[last_line_end..each_match.start()],
+                                                     b'\n');
+                    line_count += num_lines + 1;
+                    last_line_end = each_match.end();
+                    let line_number = line_count.to_string();
+                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+                    stdout.write(&line_number.as_bytes()).unwrap();
                     stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
-                    start_from = m.end();
+                    if match_options.print_format == PrintFormat::VisualStudio {
+                        write!(&mut stdout, ")").unwrap();
+                    }
+                    write!(&mut stdout, ":").unwrap();
                 }
-                if start_from != line.len() {
-                    let to_write = &line[start_from..];
-                    stdout.write(&to_write).unwrap();
+                let line = &buffer[each_match.start()..each_match.end()];
+                if match_options.with_color {
+                    let mut start_from = 0;
+                    for m in matcher.find_iter(&line) {
+                        let to_write = &line[start_from..m.start()];
+                        stdout.write(&to_write).unwrap();
+                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+                        let to_write = &line[m.start()..m.end()];
+                        stdout.write(&to_write).unwrap();
+                        stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                        start_from = m.end();
+                    }
+                    if start_from != line.len() {
+                        let to_write = &line[start_from..];
+                        stdout.write(&to_write).unwrap();
+                    }
+                } else {
+                    stdout.write(&line).unwrap();
                 }
-            } else {
-                stdout.write(&line).unwrap();
+                if line.last() != Some(&b'\n') {
+                    stdout.write(&[b'\n']).unwrap();
+                }
             }
-            if line.last() != Some(&b'\n') {
-                stdout.write(&[b'\n']).unwrap();
+            if !found_match && match_options.line_number {
+                let num_lines = bytecount::count(&buffer[..last_newline], b'\n');
+                line_count += num_lines;
             }
+            tmp.clear();
+            tmp.extend_from_slice(&buffer[last_newline..]);
+            buffer[..tmp.len()].copy_from_slice(&tmp);
+        }
+        if match_options.print_count && num_matches != 0 {
+            writeln!(&mut stdout, "{}:{}", name.display(), num_matches).unwrap();
         }
     }
 
