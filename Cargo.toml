@@ -19,7 +19,7 @@ bytecount = "0.1"
 regex = "0.2"
 regex-syntax = "0.4"
 log = "0.3"
-tempfile = "1.1"
+tempfile = "2.1"
 walkdir = "0.1"
 
 consts = { path = "src/consts" }

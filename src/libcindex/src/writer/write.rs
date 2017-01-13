@@ -14,7 +14,7 @@ use std::ffi::OsString;
 use std::mem;
 
 use libvarint;
-use tempfile::TempFile;
+use tempfile::tempfile;
 use byteorder::{BigEndian, WriteBytesExt};
 use libprofiling;
 
@@ -64,8 +64,8 @@ pub struct IndexWriter {
 
     paths: Vec<OsString>,
 
-    name_data: BufWriter<TempFile>,
-    name_index: BufWriter<TempFile>,
+    name_data: BufWriter<File>,
+    name_index: BufWriter<File>,
 
     trigram: SparseSet,
 
@@ -76,7 +76,7 @@ pub struct IndexWriter {
 
     post: Vec<PostEntry>,
     post_files: Vec<Vec<PostEntry>>,
-    post_index: BufWriter<TempFile>,
+    post_index: BufWriter<File>,
 
     index: BufWriter<File>,
 }
@@ -310,7 +310,7 @@ impl IndexWriter {
     }
 }
 
-fn make_temp_buf() -> io::Result<BufWriter<TempFile>> {
-    let w = try!(TempFile::new());
+fn make_temp_buf() -> io::Result<BufWriter<File>> {
+    let w = try!(tempfile());
     Ok(BufWriter::with_capacity(256 << 10, w))
 }

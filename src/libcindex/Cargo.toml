@@ -7,7 +7,7 @@ authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 byteorder = "0.5"
 log = "0.3"
 memmap = "0.2"
-tempfile = "1.1"
+tempfile = "2.1"
 
 consts = { path = "../consts" }
 libcsearch = { path = "../libcsearch" }
