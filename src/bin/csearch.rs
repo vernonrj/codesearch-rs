@@ -93,7 +93,7 @@ pub fn is_color_output_available() -> bool {
     let t = if let Ok(term) = env::var("TERM") {
         term
     } else {
-        return false;
+        return true;
     };
     if t == "dumb" {
         return false;
@@ -311,9 +311,10 @@ pub fn main() {
                     writeln!(&mut stdout, "{}", name.display()).unwrap();
                     break 'file;
                 }
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+                stdout.set_color(ColorSpec::new().set_bold(true).set_fg(Some(Color::Green)))
+                    .unwrap();
                 write!(&mut stdout, "{}", name.display()).unwrap();
-                stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                stdout.reset().unwrap();
                 if match_options.print_format == PrintFormat::VisualStudio {
                     write!(&mut stdout, "(").unwrap();
                 } else {
@@ -325,9 +326,10 @@ pub fn main() {
                     line_count += num_lines + 1;
                     last_line_end = each_match.end();
                     let line_number = line_count.to_string();
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+                    stdout.set_color(ColorSpec::new().set_bold(true).set_fg(Some(Color::Blue)))
+                        .unwrap();
                     stdout.write(&line_number.as_bytes()).unwrap();
-                    stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                    stdout.reset().unwrap();
                     if match_options.print_format == PrintFormat::VisualStudio {
                         write!(&mut stdout, ")").unwrap();
                     }
@@ -339,10 +341,11 @@ pub fn main() {
                     for m in matcher.find_iter(&line) {
                         let to_write = &line[start_from..m.start()];
                         stdout.write(&to_write).unwrap();
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+                        stdout.set_color(ColorSpec::new().set_bold(true).set_fg(Some(Color::Red)))
+                            .unwrap();
                         let to_write = &line[m.start()..m.end()];
                         stdout.write(&to_write).unwrap();
-                        stdout.set_color(ColorSpec::new().set_fg(None)).unwrap();
+                        stdout.reset().unwrap();
                         start_from = m.end();
                     }
                     if start_from != line.len() {
