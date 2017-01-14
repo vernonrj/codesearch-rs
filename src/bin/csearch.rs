@@ -287,6 +287,7 @@ pub fn main() {
                 break;
             }
             let total_bytes = bytes_read + trailing_bytes;
+            debug_assert!(total_bytes > 0, "BUG: no bytes to process");
             let mut last_line_end = 0;
             if match_options.print_count {
                 num_matches += g.iter(&buffer).count();
@@ -304,9 +305,7 @@ pub fn main() {
                 }
             };
             trailing_bytes = total_bytes - last_newline;
-            let mut found_match = false;
             for each_match in g.iter(&buffer[..last_newline]) {
-                found_match = true;
                 if match_options.files_with_matches_only {
                     writeln!(&mut stdout, "{}", name.display()).unwrap();
                     break 'file;
@@ -320,7 +319,7 @@ pub fn main() {
                 } else {
                     write!(&mut stdout, ":").unwrap();
                 }
-                if match_options.line_number && last_line_end != each_match.end() {
+                if match_options.line_number {
                     let num_lines = bytecount::count(&buffer[last_line_end..each_match.start()],
                                                      b'\n');
                     line_count += num_lines + 1;
@@ -360,12 +359,17 @@ pub fn main() {
                 }
                 stdout.flush().unwrap();
             }
-            if !found_match && match_options.line_number {
-                let num_lines = bytecount::count(&buffer[..last_newline], b'\n');
+            if match_options.line_number {
+                let num_lines = bytecount::count(&buffer[last_line_end..last_newline], b'\n');
                 line_count += num_lines;
             }
             tmp.clear();
-            tmp.extend_from_slice(&buffer[last_newline..]);
+            tmp.extend_from_slice(&buffer[last_newline..total_bytes]);
+            assert_eq!(trailing_bytes,
+                       tmp.len(),
+                       "BUG: expected {} bytes left in chunk, actually {} bytes left",
+                       trailing_bytes,
+                       tmp.len());
             buffer[..tmp.len()].copy_from_slice(&tmp);
         }
         if match_options.print_count && num_matches != 0 {
