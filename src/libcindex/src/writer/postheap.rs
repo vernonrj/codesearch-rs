@@ -79,7 +79,7 @@ impl PostHeap {
         }
     }
     fn sift_down(&mut self, mut i: usize) {
-        let mut ch = &mut self.ch;
+        let ch = &mut self.ch;
         let len = ch.len();
         loop {
             let j1 = 2 * i + 1;

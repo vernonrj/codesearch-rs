@@ -15,7 +15,7 @@ clap = "2.1"
 grep = "0.1"
 glob = "0.2"
 memchr = "1.0"
-bytecount = "0.1"
+bytecount = "0.4"
 regex = "0.2"
 regex-syntax = "0.4"
 log = "0.3"
@@ -31,9 +31,8 @@ libprofiling = { path = "src/libprofiling" }
 libvarint = { path = "src/libvarint" }
 
 [features]
-default = ["simd-accel"]
+default = ["runtime-dispatch-simd"]
 profile = []
-avx-accel = ["bytecount/avx-accel"]
-simd-accel = ["bytecount/simd-accel"]
+runtime-dispatch-simd = ["bytecount/runtime-dispatch-simd"]
 
 [workspace]

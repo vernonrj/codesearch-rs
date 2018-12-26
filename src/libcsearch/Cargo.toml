@@ -4,9 +4,9 @@ version = "0.1.0"
 authors = ["Vernon Jones <vernonrjones@gmail.com>"]
 
 [dependencies]
-byteorder = "0.4"
+byteorder = "1.2"
 memmap = "0.2"
-num = "0.1"
+num = "0.2"
 regex = "0.2"
 regex-syntax = "0.4"
 

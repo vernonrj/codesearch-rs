@@ -11,7 +11,6 @@ use super::error::{IndexResult, IndexError, IndexErrorKind};
 /// queried by the `.error()` method. This is because this iteration is a fairly
 /// tight loop, and flattening the return of the `.next()` method from
 /// `Option<Result<u32>>` to `Option<u32>` resulted in a respectable speedup.
-/// ```
 pub struct TrigramReader<R: Read> {
     reader: io::Bytes<BufReader<R>>,
     current_value: u32,
