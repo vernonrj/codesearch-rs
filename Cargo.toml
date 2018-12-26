@@ -22,6 +22,7 @@ log = "0.3"
 tempfile = "2.1"
 walkdir = "0.1"
 
+           
 consts = { path = "src/consts" }
 libcustomlogger = { path = "src/libcustomlogger" }
 libcsearch = { path = "src/libcsearch" }
@@ -35,4 +36,4 @@ profile = []
 avx-accel = ["bytecount/avx-accel"]
 simd-accel = ["bytecount/simd-accel"]
 
-
+[workspace]
